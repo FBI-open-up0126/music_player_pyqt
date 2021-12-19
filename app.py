@@ -1,44 +1,70 @@
 from typing import Optional
 from PyQt6 import QtCore
 from PyQt6.QtCore import QObject, QThread, pyqtSlot
+from PyQt6.QtGui import QPixmap
 from PyQt6.QtWidgets import (
     QHeaderView,
+    QLabel,
+    QMessageBox,
     QPushButton,
+    QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
     QWidget,
 )
 import youtubesearchpython as ytsearch
-import datetime
+import pytube
+import urllib.request as urlreq
+import time
+import logging
 
 from ui.app import Ui_App
 from ui.search_menu import Ui_SearchMenu
 from ui.welcome_menu import Ui_WelcomeMenu
 
-SEARCH_LIMIT = 20
+SEARCH_LIMIT = 7
 
 
-class MyPushButton(QPushButton):
-    def __init__(
-        self,
-    ):
-        super().__init__("Download!")
+class DownloadButton(QPushButton):
+    def __init__(self, link: Optional[str], parent: QWidget):
+        super().__init__("Download")
+
+        self.link = link
+        self.parent = parent
+        self.clicked.connect(self.download)
+
+    def download(self):
+        if self.link == None:
+            QMessageBox.critical(
+                self.parent,
+                "Cannot Download!",
+                "Cannot download this video! (Error: No Link)",
+            )
+            return
+
+        print("Downloading!!!!")
+        video = pytube.YouTube(self.link)
+        streams = video.streams.filter(only_audio=True).get_audio_only()
+        streams.download("downloaded_music")
+
+        print(self.link)
 
 
 class SearchVideo(QObject):
     done = QtCore.pyqtSignal()
+    result_ready = QtCore.pyqtSignal(dict)
 
     def search(self, search_text) -> None:
         try:
             self.search_results = ytsearch.Search(
                 search_text, limit=SEARCH_LIMIT, timeout=10
             ).result()
+            self.result_ready.emit(self.search_results)
         except Exception as error:
             print(f"No Internet Connection Avaliable! (Error: {type(error).__name__})")
             self.done.emit()
             return
 
-        print(self.search_results)
         self.done.emit()
 
 
@@ -49,6 +75,8 @@ class App(QWidget):
         # initialize variables
         self.ui = Ui_App()
         self.ui.setupUi(self)
+
+        self.resize(1600, 1000)
 
         self.mainmenu_widgets: dict[str, tuple[QWidget, object]] = {}
 
@@ -62,7 +90,7 @@ class App(QWidget):
         ui_welcome_menu: Ui_WelcomeMenu = self.add_widget(
             Ui_WelcomeMenu(), "welcome_menu"
         )
-        now = datetime.datetime.now()
+        now = time.per
         if now.hour in range(5, 12):
             ui_welcome_menu.greetings.setText("Good Morning")
         elif now.hour in range(12, 18):
@@ -75,6 +103,10 @@ class App(QWidget):
         ui_search_menu.results.horizontalHeader().setSectionResizeMode(
             QHeaderView.ResizeMode.Stretch
         )
+        ui_search_menu.results.setVerticalScrollMode(
+            QTableWidget.ScrollMode.ScrollPerPixel
+        )
+        ui_search_menu.results.verticalScrollBar().setSingleStep(20)
 
         self.get_widget("welcome_menu", 0).show()
 
@@ -101,6 +133,7 @@ class App(QWidget):
         """
         return self.mainmenu_widgets[name][index]
 
+    @pyqtSlot(dict)
     def done_search(self, search_result: dict):
         # try:
         #     self.search_results = ytsearch.Search(
@@ -110,27 +143,46 @@ class App(QWidget):
         #     print(f"No Internet Connection Avaliable! (Error: {type(error).__name__})")
         #     return
 
-        print(search_result == None)
         ui_search_menu: Ui_SearchMenu = self.get_widget("search_menu")
         ui_search_menu.results.show()
         ui_search_menu.searching_label.hide()
 
-        total_search = SEARCH_LIMIT
+        ui_search_menu.results.clear()
+        ui_search_menu.results.setRowCount(0)
+
+        start = time.perf_counter()
 
         for (index, result) in enumerate(search_result["result"]):
             if not "title" in result or not "channel" in result:
-                total_search = index
                 break
 
             ui_search_menu.results.insertRow(index)
-
-            ui_search_menu.results.setItem(index, 0, QTableWidgetItem(result["title"]))
-            ui_search_menu.results.setItem(
-                index, 1, QTableWidgetItem(result["channel"]["name"])
+            thumbnail = QLabel()
+            data = urlreq.urlopen(result["thumbnails"][0]["url"]).read()
+            image = QPixmap()
+            image.loadFromData(data)
+            thumbnail.setPixmap(
+                image.scaled(
+                    int(self.width() / 5),
+                    int(self.height() / 5),
+                    QtCore.Qt.AspectRatioMode.KeepAspectRatio,
+                )
             )
-            ui_search_menu.results.setCellWidget(index, 2, QPushButton("Hello, world!"))
+            ui_search_menu.results.setCellWidget(index, 0, thumbnail)
+            ui_search_menu.results.setItem(index, 1, QTableWidgetItem(result["title"]))
+            ui_search_menu.results.setItem(
+                index, 2, QTableWidgetItem(result["channel"]["name"])
+            )
+            ui_search_menu.results.setCellWidget(
+                index,
+                3,
+                DownloadButton(result["link"] if "link" in result else None, self),
+            )
 
-        # ui_search_menu.results.setRowCount(total_search)
+        end = time.perf_counter()
+        print(f"Time Elapsd: {end-start} seconds")
+
+        ui_search_menu.results.resizeRowsToContents()
 
     def start_search(self):
         if not self.ui.search_bar.text():
@@ -144,13 +196,17 @@ class App(QWidget):
         self.mainmenu_widgets["search_menu"][0].show()
         self.mainmenu_widgets["welcome_menu"][0].hide()
 
-        thread = QThread()
-        search_video = SearchVideo()
-        search_video.moveToThread(thread)
-        # search_video.done.connect(thread.quit)
-        thread.started.connect(lambda: search_video.search(self.ui.search_bar.text()))
-        thread.finished.connect(lambda: self.done_search(search_video.search_results))
-        thread.start()
+        self.thread = QThread()
+        self.search_video = SearchVideo()
+
+        self.search_video.result_ready.connect(self.done_search)
+        self.search_video.moveToThread(self.thread)
+        self.search_video.done.connect(self.thread.quit)
+
+        self.thread.started.connect(
+            lambda: self.search_video.search(self.ui.search_bar.text())
+        )
+        self.thread.start()
 
         # thread = threading.Thread(target=self.search)
         # thread.start()

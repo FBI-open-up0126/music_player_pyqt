@@ -15,6 +15,11 @@
     </message>
     <message>
       <location filename="..\..\ui\search_menu.ui" line="0" />
+      <source>Thumbnail</source>
+      <translation type="unfinished" />
+    </message>
+    <message>
+      <location filename="..\..\ui\search_menu.ui" line="0" />
       <source>Title</source>
       <translation type="unfinished" />
     </message>
