@@ -2,7 +2,6 @@ import time
 import datetime
 import logging
 import tasks
-import gc
 
 from PyQt6.QtCore import QThread, pyqtSlot
 from PyQt6.QtWidgets import (
@@ -14,14 +13,12 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 from functools import partial
-from main import FORMAT, LOGGING_LEVEL
 from ui.app import Ui_App
 from ui.search_menu import Ui_SearchMenu
 from ui.welcome_menu import Ui_WelcomeMenu
 from my_widget import DownloadButton
-from pympler.tracker import SummaryTracker
-
-SEARCH_LIMIT = 15
+from PyQt6 import QtGui
+from app_settings import FORMAT, LOGGING_LEVEL
 
 logging.basicConfig(format=FORMAT, level=LOGGING_LEVEL)
 logger = logging.getLogger(__name__)
@@ -48,6 +45,9 @@ class App(QWidget):
 
         self.image_loading_thread = QThread()
         self.search_thread = QThread()
+
+        self.image_loading_thread.setTerminationEnabled(True)
+        self.search_thread.setTerminationEnabled(True)
 
         # initialize widgets
         ui_welcome_menu: Ui_WelcomeMenu = self.add_widget(
@@ -133,13 +133,7 @@ class App(QWidget):
                 continue
 
         end = time.perf_counter()
-        logger.info(f"Time Elapsed: {end-start} seconds")
-
-        self.image_loading_thread.requestInterruption()
-        self.image_loader.interrupt = True
-        while self.image_loading_thread.isRunning():
-            logger.debug("Thread is not stopping!")
-            time.sleep(1)
+        logger.debug(f"Time Elapsed: {end-start} seconds")
 
         self.image_loading_thread = QThread()
         self.image_loader = tasks.ImageLoader()
@@ -151,8 +145,6 @@ class App(QWidget):
             partial(self.image_loader.load_images, search_result, self.size())
         )
         self.image_loading_thread.start()
-
-        ui_search_menu.results.resizeRowsToContents()
 
     @pyqtSlot(int)
     def load_image(self, index: int):
@@ -173,11 +165,14 @@ class App(QWidget):
         ui_search_menu.searching_label.show()
         ui_search_menu.results.hide()
 
-        # self.image_loading_thread.quit()
-        # self.search_thread.quit()
-
         self.mainmenu_widgets["search_menu"][0].show()
         self.mainmenu_widgets["welcome_menu"][0].hide()
+
+        if self.image_loading_thread.isRunning():
+            self.image_loader.interrupt = True
+            self.image_loading_thread.quit()
+        if self.search_thread.isRunning():
+            self.search_thread.quit()
 
         self.search_thread = QThread()
         self.search_video = tasks.SearchVideo()
@@ -189,3 +184,10 @@ class App(QWidget):
             partial(self.search_video.search, self.ui.search_bar.text())
         )
         self.search_thread.start()
+
+    def closeEvent(self, a0: QtGui.QCloseEvent) -> None:
+        self.search_thread.terminate()
+        self.image_loading_thread.terminate()
+        self.image_loader.interrupt = True
+
+        return super().closeEvent(a0)

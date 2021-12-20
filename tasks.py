@@ -4,14 +4,11 @@ import urllib.request as urlreq
 
 from PyQt6.QtCore import QObject, QSize
 from PyQt6 import QtCore
-from main import LOGGING_LEVEL, FORMAT
+from app_settings import FORMAT, LOGGING_LEVEL, SEARCH_LIMIT
 from PyQt6.QtGui import QPixmap
-from PyQt6.QtWidgets import QLabel
 
 logging.basicConfig(level=LOGGING_LEVEL, format=FORMAT)
 logger = logging.getLogger(__name__)
-
-SEARCH_LIMIT = 15
 
 
 class SearchVideo(QObject):
@@ -63,7 +60,6 @@ class ImageLoader(QObject):
                 self.thumbnails.append(QPixmap())
                 self.image_loaded.emit(index)
                 continue
-            logger.debug(f"index added: {index}")
             self.image_loaded.emit(index)
 
         self.done.emit()

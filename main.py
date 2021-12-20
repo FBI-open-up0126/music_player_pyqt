@@ -1,9 +1,5 @@
 import sys
-import logging
 import gc
-
-LOGGING_LEVEL = logging.DEBUG
-FORMAT = "module %(name)s(%(levelname)s): %(message)s"
 
 from PyQt6.QtWidgets import QApplication
 import app
