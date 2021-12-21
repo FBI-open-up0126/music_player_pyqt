@@ -1,6 +1,8 @@
 import time
 import datetime
 import logging
+
+import pytube
 import tasks
 
 from PyQt6.QtCore import QThread, pyqtSlot
@@ -115,6 +117,13 @@ class App(QWidget):
         self.delete_cell_widgets()
 
         for (index, result) in enumerate(search_result["result"]):
+            download_button = DownloadButton(
+                result["link"] if "link" in result else None, self
+            )
+            download_button.done_downloading.connect(
+                partial(self.done_downloading, download_button.link)
+            )
+
             ui_search_menu.results.insertRow(index)
             try:
                 ui_search_menu.results.setItem(
@@ -126,7 +135,7 @@ class App(QWidget):
                 ui_search_menu.results.setCellWidget(
                     index,
                     3,
-                    DownloadButton(result["link"] if "link" in result else None, self),
+                    download_button,
                 )
             except Exception as error:
                 logger.error("Cannot insert data! (Error: %s)", error)
@@ -191,3 +200,7 @@ class App(QWidget):
         self.image_loader.interrupt = True
 
         return super().closeEvent(a0)
+
+    @pyqtSlot(str)
+    def done_downloading(self, link: str):
+        video = pytube.YouTube(link)

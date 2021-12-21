@@ -1,4 +1,5 @@
 import logging
+import pytube
 import youtubesearchpython as ytsearch
 import urllib.request as urlreq
 
@@ -60,6 +61,23 @@ class ImageLoader(QObject):
                 self.thumbnails.append(QPixmap())
                 self.image_loaded.emit(index)
                 continue
+
             self.image_loaded.emit(index)
+
+        self.done.emit()
+
+
+class DownloadVideo(QObject):
+    done = QtCore.pyqtSignal()
+
+    def __init__(self, link: str):
+        super().__init__()
+
+        self.link = link
+
+    def start_download(self):
+        video = pytube.YouTube(self.link)
+        stream = video.streams.filter(only_audio=True).get_audio_only()
+        stream.download("downloaded_music", skip_existing=False)
 
         self.done.emit()

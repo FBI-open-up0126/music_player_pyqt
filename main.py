@@ -1,8 +1,7 @@
 import sys
-import gc
+import app
 
 from PyQt6.QtWidgets import QApplication
-import app
 
 
 def exception_hook(exctype, value, traceback):
@@ -12,8 +11,6 @@ def exception_hook(exctype, value, traceback):
 
 
 def main():
-    gc.set_debug(gc.DEBUG_UNCOLLECTABLE)
-
     application = QApplication(sys.argv)
     widget = app.App()
     widget.show()
