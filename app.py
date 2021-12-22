@@ -1,14 +1,16 @@
 import time
 import datetime
 import logging
-
+import string
 import pytube
 import tasks
+import random
 
-from PyQt6.QtCore import QThread, pyqtSlot
+from PyQt6.QtCore import QThread, QThreadPool, pyqtSlot
 from PyQt6.QtWidgets import (
     QHeaderView,
     QLabel,
+    QMessageBox,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -26,7 +28,14 @@ logging.basicConfig(format=FORMAT, level=LOGGING_LEVEL)
 logger = logging.getLogger(__name__)
 
 
+def id_generator(size=6, chars=string.ascii_uppercase + string.digits) -> str:
+    return "".join(random.choice(chars) for _ in range(size))
+
+
 class App(QWidget):
+    download_threads: dict[str, tuple[QThread, tasks.VideoDownloadManager]] = {}
+    video_download_manager = tasks.VideoDownloadManager()
+
     def __init__(self, parent=None):
         super().__init__(parent)
 
@@ -50,6 +59,10 @@ class App(QWidget):
 
         self.image_loading_thread.setTerminationEnabled(True)
         self.search_thread.setTerminationEnabled(True)
+
+        self.pool = QThreadPool()
+
+        App.video_download_manager.done_downloading.connect(self.done_downloading)
 
         # initialize widgets
         ui_welcome_menu: Ui_WelcomeMenu = self.add_widget(
@@ -111,17 +124,16 @@ class App(QWidget):
         ui_search_menu.searching_label.hide()
 
         ui_search_menu.results.setRowCount(0)
+        self.delete_cell_widgets()
 
         start = time.perf_counter()
 
-        self.delete_cell_widgets()
-
         for (index, result) in enumerate(search_result["result"]):
-            download_button = DownloadButton(
-                result["link"] if "link" in result else None, self
-            )
-            download_button.done_downloading.connect(
-                partial(self.done_downloading, download_button.link)
+            link = result["link"] if "link" in result else None
+
+            download_button = DownloadButton(link, self)
+            download_button.clicked.connect(
+                partial(self.start_download, download_button)
             )
 
             ui_search_menu.results.insertRow(index)
@@ -201,6 +213,53 @@ class App(QWidget):
 
         return super().closeEvent(a0)
 
+    def set_button_downloaded(self, button: DownloadButton):
+        try:
+            button.setText("Downloaded!")
+            # button.setEnabled(True)
+        except Exception:
+            pass
+
+    @pyqtSlot(str)
+    def delete_thread(_, thread_id: str):
+        logger.info(App.download_threads)
+        logger.info(f"Deleting {thread_id}...")
+        App.download_threads[thread_id][0].quit()
+        logger.info("Quitted successful")
+        del App.download_threads[thread_id]
+        logger.info(App.download_threads)
+
+    @pyqtSlot(DownloadButton)
+    def start_download(self, button: DownloadButton):
+        if pytube.YouTube(button.link).length >= 600:
+            choice_button = QMessageBox.warning(
+                self,
+                "Warning",
+                "You are about to download a video that is more than 10 minutes long. It might take a long time. Continue?",
+                QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel,
+            )
+            if choice_button == QMessageBox.StandardButton.Cancel:
+                return
+        logger.debug(f"start download {button.link}")
+
+        try:
+            button.setText("Downloading...")
+            button.setEnabled(False)
+        except Exception as error:
+            logger.error("cannot edit button! %s", error)
+
+        App.video_download_manager.add_download(button.link)
+        App.video_download_manager.done_downloading.connect(
+            partial(self.set_button_downloaded, button)
+        )
+        App.video_download_manager.download()
+
     @pyqtSlot(str)
     def done_downloading(self, link: str):
         video = pytube.YouTube(link)
+
+        QMessageBox.information(
+            self,
+            "Done Downloading!",
+            f"Video {video.title} has been successfully downloaded",
+        )

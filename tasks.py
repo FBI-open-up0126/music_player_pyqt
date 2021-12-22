@@ -3,7 +3,7 @@ import pytube
 import youtubesearchpython as ytsearch
 import urllib.request as urlreq
 
-from PyQt6.QtCore import QObject, QSize
+from PyQt6.QtCore import QObject, QRunnable, QSize, QThread
 from PyQt6 import QtCore
 from app_settings import FORMAT, LOGGING_LEVEL, SEARCH_LIMIT
 from PyQt6.QtGui import QPixmap
@@ -67,17 +67,56 @@ class ImageLoader(QObject):
         self.done.emit()
 
 
-class DownloadVideo(QObject):
+class VideoDownloadManager(QObject):
+    class VideoDownload(QObject):
+        download_list: list[str] = list()
+        done = QtCore.pyqtSignal()
+        done_downloading = QtCore.pyqtSignal(str)
+
+        def __init__(self) -> None:
+            super().__init__()
+
+        def start_download(self):
+            Self = VideoDownloadManager.VideoDownload
+            while Self.download_list:
+                logger.info(f"download list links: {Self.download_list}")
+                try:
+                    link = Self.download_list[0]
+                    logger.info(f"Starting to download {link}")
+                    video = pytube.YouTube(link)
+                    stream = video.streams.get_audio_only()
+                    stream.download("audio_downloads", skip_existing=False)
+                    logger.info("Downloaded Successful!")
+                except Exception as error:
+                    logger.error("Error while downloading video: %s", error)
+                self.done_downloading.emit(link)
+                self.download_list.pop(0)
+
+            self.done.emit()
+
     done = QtCore.pyqtSignal()
+    done_downloading = QtCore.pyqtSignal(str)
+    download_thread = QThread()
+    downloader = VideoDownload()
 
-    def __init__(self, link: str):
-        super().__init__()
+    def __init__(self):
+        QObject.__init__(self)
 
-        self.link = link
+    def download(self):
+        Self = VideoDownloadManager
 
-    def start_download(self):
-        video = pytube.YouTube(self.link)
-        stream = video.streams.filter(only_audio=True).get_audio_only()
-        stream.download("downloaded_music", skip_existing=False)
+        if Self.download_thread.isRunning():
+            return
 
-        self.done.emit()
+        Self.download_thread = QThread()
+
+        Self.downloader.moveToThread(Self.download_thread)
+        Self.downloader.done.connect(Self.download_thread.quit)
+        Self.downloader.done.connect(self.done.emit)
+        Self.downloader.done_downloading.connect(self.done_downloading.emit)
+
+        Self.download_thread.started.connect(Self.downloader.start_download)
+        Self.download_thread.start()
+
+    def add_download(self, link: str):
+        VideoDownloadManager.downloader.download_list.append(link)
