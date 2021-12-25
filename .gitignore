@@ -8,5 +8,5 @@ __pycache__/
 /app_goal.md
 /.vscode
 
-*pyo
-*pyc
+*.pyo
+*.pyc
