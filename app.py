@@ -1,16 +1,17 @@
 import time
 import datetime
 import logging
-import string
+from types import NoneType
 import pytube
 import tasks
-import random
 
-from PyQt6.QtCore import QThread, QThreadPool, pyqtSlot
+from PyQt6.QtCore import QThread, QTimer, pyqtSlot
 from PyQt6.QtWidgets import (
+    QDialog,
     QHeaderView,
     QLabel,
     QMessageBox,
+    QPushButton,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -18,18 +19,17 @@ from PyQt6.QtWidgets import (
 )
 from functools import partial
 from ui.app import Ui_App
+from ui.help_dialog import Ui_HelpDialog
 from ui.search_menu import Ui_SearchMenu
 from ui.welcome_menu import Ui_WelcomeMenu
+from ui.download_from_url_dialog import Ui_DownloadFromURL
 from my_widget import DownloadButton
 from PyQt6 import QtGui
 from app_settings import FORMAT, LOGGING_LEVEL
+from ui.playlist_ui import Ui_MusicListWidget
 
 logging.basicConfig(format=FORMAT, level=LOGGING_LEVEL)
 logger = logging.getLogger(__name__)
-
-
-def id_generator(size=6, chars=string.ascii_uppercase + string.digits) -> str:
-    return "".join(random.choice(chars) for _ in range(size))
 
 
 class App(QWidget):
@@ -42,6 +42,16 @@ class App(QWidget):
         # initialize variables
         self.ui = Ui_App()
         self.ui.setupUi(self)
+
+        self.ui_help_dialog = Ui_HelpDialog()
+        self.help_dialog = QDialog()
+
+        self.ui_help_dialog.setupUi(self.help_dialog)
+        self.ui_help_dialog.text_browser.setOpenExternalLinks(True)
+
+        self.ui_download_directly = Ui_DownloadFromURL()
+        self.download_directly_dialog = QDialog()
+        self.ui_download_directly.setupUi(self.download_directly_dialog)
 
         self.resize(1600, 1000)
 
@@ -60,8 +70,6 @@ class App(QWidget):
         self.image_loading_thread.setTerminationEnabled(True)
         self.search_thread.setTerminationEnabled(True)
 
-        self.pool = QThreadPool()
-
         App.video_download_manager.done_downloading.connect(self.done_downloading)
 
         # initialize widgets
@@ -79,28 +87,56 @@ class App(QWidget):
         ui_search_menu: Ui_SearchMenu = self.add_widget(Ui_SearchMenu(), "search_menu")
         ui_search_menu.results.hide()
         ui_search_menu.results.horizontalHeader().setSectionResizeMode(
-            QHeaderView.ResizeMode.Stretch
+            QHeaderView.ResizeMode.ResizeToContents
         )
         ui_search_menu.results.setVerticalScrollMode(
             QTableWidget.ScrollMode.ScrollPerPixel
         )
+        ui_search_menu.results.setHorizontalScrollMode(
+            QTableWidget.ScrollMode.ScrollPerPixel
+        )
         ui_search_menu.results.verticalScrollBar().setSingleStep(20)
 
-        self.get_widget("welcome_menu", 0).show()
+        ui_playlist: Ui_MusicListWidget = self.add_widget(
+            Ui_MusicListWidget(), "playlist_ui"
+        )
+        ui_playlist.music_list.set_downloads_playlist_mode()
+        ui_playlist.music_list.load_music()
+        self.get_widget("playlist_ui", 0).show()
+
+        # self.get_widget("welcome_menu", 0).show()
 
         # initialize connections
         self.ui.search_button.clicked.connect(self.start_search)
         self.ui.search_bar.returnPressed.connect(self.start_search)
+        ui_welcome_menu.help_button.clicked.connect(self.help_dialog.exec)
+        self.ui.download_from_url_button.clicked.connect(
+            self.download_directly_dialog.exec
+        )
+        self.ui_download_directly.download_button.clicked.connect(
+            lambda: self.download_directly_from_url(
+                self.ui_download_directly.url_edit.text(),
+                self.ui_download_directly.download_button,
+            )
+        )
+        self.ui.download_from_url_button.clicked.connect(
+            lambda: (
+                self.ui_download_directly.download_button.setEnabled(True),
+                self.ui_download_directly.url_edit.clear(),
+            )
+        )
+        self.ui_download_directly.cancel_button.clicked.connect(
+            self.download_directly_dialog.hide
+        )
 
     def add_widget(self, ui, name: str):
         menu = QWidget(self.ui.main_menu)
-        ui_menu = ui
-        ui_menu.setupUi(menu)
+        ui.setupUi(menu)
         self.vertical_layout.addWidget(menu)
         menu.hide()
 
-        self.mainmenu_widgets[name] = (menu, ui_menu)
-        return ui_menu
+        self.mainmenu_widgets[name] = (menu, ui)
+        return ui
 
     def get_widget(self, name: str, index: int = 1):
         """
@@ -135,6 +171,7 @@ class App(QWidget):
             download_button.clicked.connect(
                 partial(self.start_download, download_button)
             )
+            download_button.setMinimumWidth(400)
 
             ui_search_menu.results.insertRow(index)
             try:
@@ -186,8 +223,8 @@ class App(QWidget):
         ui_search_menu.searching_label.show()
         ui_search_menu.results.hide()
 
-        self.mainmenu_widgets["search_menu"][0].show()
-        self.mainmenu_widgets["welcome_menu"][0].hide()
+        self.get_widget("search_menu", 0).show()
+        self.get_widget("welcome_menu", 0).hide()
 
         if self.image_loading_thread.isRunning():
             self.image_loader.interrupt = True
@@ -200,11 +237,28 @@ class App(QWidget):
         self.search_video.moveToThread(self.search_thread)
         self.search_video.done.connect(self.search_thread.quit)
         self.search_video.result_ready.connect(self.done_search)
+        self.search_video.error_occurred.connect(
+            lambda error: (
+                ui_search_menu.searching_label.setText(
+                    f"Error occurred while searching: {error}"
+                )
+            )
+        )
 
         self.search_thread.started.connect(
             partial(self.search_video.search, self.ui.search_bar.text())
         )
         self.search_thread.start()
+
+        self.ui.search_bar.setDisabled(True)
+        self.ui.search_button.setDisabled(True)
+        QTimer.singleShot(
+            1,
+            lambda: (
+                self.ui.search_bar.setEnabled(True),
+                self.ui.search_button.setEnabled(True),
+            ),
+        )
 
     def closeEvent(self, a0: QtGui.QCloseEvent) -> None:
         self.search_thread.terminate()
@@ -213,10 +267,9 @@ class App(QWidget):
 
         return super().closeEvent(a0)
 
-    def set_button_downloaded(self, button: DownloadButton):
+    def set_button_downloaded(self, button: QPushButton):
         try:
             button.setText("Downloaded!")
-            # button.setEnabled(True)
         except Exception:
             pass
 
@@ -254,12 +307,55 @@ class App(QWidget):
         )
         App.video_download_manager.download()
 
-    @pyqtSlot(str)
-    def done_downloading(self, link: str):
+    @pyqtSlot(str, Exception)
+    def done_downloading(self, link: str, error: Exception):
         video = pytube.YouTube(link)
+
+        if error != Exception():
+            QMessageBox.warning(
+                self,
+                "Failed to download!",
+                f"Failed to download {video.title} (Error: {error})",
+            )
+            return
 
         QMessageBox.information(
             self,
             "Done Downloading!",
-            f"Video {video.title} has been successfully downloaded",
+            f'Video "{video.title}" has been successfully downloaded',
         )
+
+    @pyqtSlot(str, QPushButton)
+    def download_directly_from_url(self, url: str, button: QPushButton):
+        try:
+            video = pytube.YouTube(url)
+        except Exception as error:
+            QMessageBox.warning(
+                self,
+                "Failed to download!",
+                f'Failed to download from url: "{url}" (Error: {error})',
+            )
+            return
+
+        if video.length >= 600:
+            choice_button = QMessageBox.warning(
+                self,
+                "Warning",
+                "You are about to download a video that is more than 10 minutes long. It might take a long time. Continue?",
+                QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel,
+            )
+            if choice_button == QMessageBox.StandardButton.Cancel:
+                return
+        logger.debug(f"start download {url}")
+
+        try:
+            button.setText("Downloading...")
+            button.setEnabled(False)
+        except Exception:
+            pass
+
+        App.video_download_manager.add_download(url)
+        App.video_download_manager.done_downloading.connect(
+            partial(self.set_button_downloaded, button)
+        )
+        App.video_download_manager.download()

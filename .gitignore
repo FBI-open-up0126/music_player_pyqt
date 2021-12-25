@@ -1,3 +1,12 @@
+__pycache__/
+
 /build
 /dist
-/downloaded_music
+/downloads
+/.idea
+/.qt_for_python
+/app_goal.md
+/.vscode
+
+*pyo
+*pyc

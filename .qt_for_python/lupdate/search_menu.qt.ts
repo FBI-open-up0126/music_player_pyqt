@@ -25,7 +25,7 @@
     </message>
     <message>
       <location filename="..\..\ui\search_menu.ui" line="0" />
-      <source>Channel</source>
+      <source>Author</source>
       <translation type="unfinished" />
     </message>
     <message>

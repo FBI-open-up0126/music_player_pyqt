@@ -15,6 +15,16 @@
     </message>
     <message>
       <location filename="..\..\ui\app.ui" line="0" />
+      <source>Download from URL</source>
+      <translation type="unfinished" />
+    </message>
+    <message>
+      <location filename="..\..\ui\app.ui" line="0" />
+      <source>Settings</source>
+      <translation type="unfinished" />
+    </message>
+    <message>
+      <location filename="..\..\ui\app.ui" line="0" />
       <source>Search songs here....</source>
       <translation type="unfinished" />
     </message>

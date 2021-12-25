@@ -1,4 +1,4 @@
-# Form implementation generated from reading ui file 'f:\2. Coding\3. VS Code Project\Python\music_player_qt\ui\search_menu.ui'
+# Form implementation generated from reading ui file 'f:\2. Programming\3. VS Code Project\Python\music_player_qt\ui\search_menu.ui'
 #
 # Created by: PyQt6 UI code generator 6.2.2
 #
@@ -22,8 +22,9 @@ class Ui_SearchMenu(object):
         self.verticalLayout.addWidget(self.searching_label)
         self.results = QtWidgets.QTableWidget(SearchMenu)
         self.results.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        self.results.setSizeAdjustPolicy(QtWidgets.QAbstractScrollArea.SizeAdjustPolicy.AdjustIgnored)
+        self.results.setSizeAdjustPolicy(QtWidgets.QAbstractScrollArea.SizeAdjustPolicy.AdjustToContentsOnFirstShow)
         self.results.setEditTriggers(QtWidgets.QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.results.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectionBehavior.SelectRows)
         self.results.setRowCount(0)
         self.results.setColumnCount(4)
         self.results.setObjectName("results")
@@ -49,6 +50,6 @@ class Ui_SearchMenu(object):
         item = self.results.horizontalHeaderItem(1)
         item.setText(_translate("SearchMenu", "Title"))
         item = self.results.horizontalHeaderItem(2)
-        item.setText(_translate("SearchMenu", "Channel"))
+        item.setText(_translate("SearchMenu", "Author"))
         item = self.results.horizontalHeaderItem(3)
         item.setText(_translate("SearchMenu", "Download"))
