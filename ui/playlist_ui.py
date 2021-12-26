@@ -9,37 +9,35 @@
 from PyQt6 import QtCore, QtGui, QtWidgets
 
 
-class Ui_MusicListWidget(object):
-    def setupUi(self, MusicListWidget):
-        MusicListWidget.setObjectName("MusicListWidget")
-        MusicListWidget.resize(640, 480)
-        self.verticalLayout = QtWidgets.QVBoxLayout(MusicListWidget)
+class Ui_PlaylistWidget(object):
+    def setupUi(self, PlaylistWidget):
+        PlaylistWidget.setObjectName("PlaylistWidget")
+        PlaylistWidget.resize(640, 480)
+        self.verticalLayout = QtWidgets.QVBoxLayout(PlaylistWidget)
         self.verticalLayout.setContentsMargins(0, 0, 0, 0)
         self.verticalLayout.setObjectName("verticalLayout")
-        self.music_list = MusicList(MusicListWidget)
-        self.music_list.setRowCount(0)
-        self.music_list.setColumnCount(3)
-        self.music_list.setObjectName("music_list")
+        self.playlist = Playlist(PlaylistWidget)
+        self.playlist.setRowCount(0)
+        self.playlist.setColumnCount(3)
+        self.playlist.setObjectName("playlist")
         item = QtWidgets.QTableWidgetItem()
-        self.music_list.setHorizontalHeaderItem(0, item)
+        self.playlist.setHorizontalHeaderItem(0, item)
         item = QtWidgets.QTableWidgetItem()
-        self.music_list.setHorizontalHeaderItem(1, item)
+        self.playlist.setHorizontalHeaderItem(1, item)
         item = QtWidgets.QTableWidgetItem()
-        self.music_list.setHorizontalHeaderItem(2, item)
-        self.verticalLayout.addWidget(self.music_list)
+        self.playlist.setHorizontalHeaderItem(2, item)
+        self.verticalLayout.addWidget(self.playlist)
 
-        self.retranslateUi(MusicListWidget)
-        QtCore.QMetaObject.connectSlotsByName(MusicListWidget)
+        self.retranslateUi(PlaylistWidget)
+        QtCore.QMetaObject.connectSlotsByName(PlaylistWidget)
 
-    def retranslateUi(self, MusicListWidget):
+    def retranslateUi(self, PlaylistWidget):
         _translate = QtCore.QCoreApplication.translate
-        MusicListWidget.setWindowTitle(_translate("MusicListWidget", "Form"))
-        item = self.music_list.horizontalHeaderItem(0)
-        item.setText(_translate("MusicListWidget", "Thumbnail"))
-        item = self.music_list.horizontalHeaderItem(1)
-        item.setText(_translate("MusicListWidget", "Title"))
-        item = self.music_list.horizontalHeaderItem(2)
-        item.setText(_translate("MusicListWidget", "Author"))
-
-
-from my_widget import MusicList
+        PlaylistWidget.setWindowTitle(_translate("PlaylistWidget", "Form"))
+        item = self.playlist.horizontalHeaderItem(0)
+        item.setText(_translate("PlaylistWidget", "Thumbnail"))
+        item = self.playlist.horizontalHeaderItem(1)
+        item.setText(_translate("PlaylistWidget", "Title"))
+        item = self.playlist.horizontalHeaderItem(2)
+        item.setText(_translate("PlaylistWidget", "Author"))
+from my_widget import Playlist

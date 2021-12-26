@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ui version="4.0">
- <class>MusicListWidget</class>
- <widget class="QWidget" name="MusicListWidget">
+ <class>PlaylistWidget</class>
+ <widget class="QWidget" name="PlaylistWidget">
   <property name="geometry">
    <rect>
     <x>0</x>
@@ -27,7 +27,7 @@
     <number>0</number>
    </property>
    <item>
-    <widget class="Playlist" name="music_list">
+    <widget class="Playlist" name="playlist">
      <property name="rowCount">
       <number>0</number>
      </property>

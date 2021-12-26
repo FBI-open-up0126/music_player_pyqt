@@ -26,7 +26,7 @@ from ui.download_from_url_dialog import Ui_DownloadFromURL
 from my_widget import DownloadButton
 from PyQt6 import QtGui
 from app_settings import FORMAT, LOGGING_LEVEL
-from ui.playlist_ui import Ui_MusicListWidget
+from ui.playlist_ui import Ui_PlaylistWidget
 
 logging.basicConfig(format=FORMAT, level=LOGGING_LEVEL)
 logger = logging.getLogger(__name__)
@@ -97,14 +97,15 @@ class App(QWidget):
         )
         ui_search_menu.results.verticalScrollBar().setSingleStep(20)
 
-        ui_playlist: Ui_MusicListWidget = self.add_widget(
-            Ui_MusicListWidget(), "playlist_ui"
+        ui_playlist: Ui_PlaylistWidget = self.add_widget(
+            Ui_PlaylistWidget(), "playlist_ui"
         )
-        ui_playlist.music_list.set_downloads_playlist_mode()
-        ui_playlist.music_list.load_music()
-        self.get_widget("playlist_ui", 0).show()
+        ui_playlist.playlist.set_downloads_playlist_mode()
+        ui_playlist.playlist.load_music()
 
-        # self.get_widget("welcome_menu", 0).show()
+        # self.get_widget("playlist_ui", 0).show()
+
+        self.get_widget("welcome_menu", 0).show()
 
         # initialize connections
         self.ui.search_button.clicked.connect(self.start_search)
@@ -197,21 +198,23 @@ class App(QWidget):
         self.image_loader = tasks.ImageLoader()
         self.image_loader.moveToThread(self.image_loading_thread)
         self.image_loader.done.connect(self.image_loading_thread.quit)
-        self.image_loader.image_loaded.connect(self.load_image)
+        self.image_loader.image_loaded.connect(
+            lambda index: self.load_image(index, ui_search_menu.results)
+        )
 
         self.image_loading_thread.started.connect(
             partial(self.image_loader.load_images, search_result, self.size())
         )
         self.image_loading_thread.start()
 
-    @pyqtSlot(int)
-    def load_image(self, index: int):
+    @pyqtSlot(int, QTableWidget)
+    def load_image(self, index: int, table_widget: QTableWidget):
         thumbnail = QLabel()
         thumbnail.setPixmap(self.image_loader.thumbnails[0])
         self.image_loader.thumbnails.pop()
-        ui_search_menu: Ui_SearchMenu = self.get_widget("search_menu")
-        ui_search_menu.results.setCellWidget(index, 0, thumbnail)
-        ui_search_menu.results.resizeRowsToContents()
+        # ui_search_menu: Ui_SearchMenu = self.get_widget("search_menu")
+        table_widget.setCellWidget(index, 0, thumbnail)
+        table_widget.resizeRowsToContents()
         pass
 
     def start_search(self):
@@ -307,11 +310,11 @@ class App(QWidget):
         )
         App.video_download_manager.download()
 
-    @pyqtSlot(str, Exception)
-    def done_downloading(self, link: str, error: Exception):
+    @pyqtSlot(str, Exception, bool)
+    def done_downloading(self, link: str, error: Exception, error_exist: bool):
         video = pytube.YouTube(link)
 
-        if error != Exception():
+        if error_exist:
             QMessageBox.warning(
                 self,
                 "Failed to download!",

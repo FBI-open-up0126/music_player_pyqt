@@ -1,10 +1,13 @@
+from functools import partial
 import logging
 import json
 import os
 import pytube
+import tasks
 
 from typing import Optional
-from PyQt6 import QtGui
+from PyQt6 import QtCore, QtGui
+from PyQt6.QtCore import QThread
 from PyQt6.QtWidgets import (
     QHeaderView,
     QLineEdit,
@@ -13,7 +16,13 @@ from PyQt6.QtWidgets import (
     QTableWidget,
     QWidget,
 )
-from app_settings import DOWNLOADS_PLAYLIST, FORMAT, LOGGING_LEVEL, PLAYLIST_DIRECTORY, YOUTUBE_PREFIX
+from app_settings import (
+    DOWNLOADS_PLAYLIST,
+    FORMAT,
+    LOGGING_LEVEL,
+    PLAYLIST_DIRECTORY,
+    YOUTUBE_PREFIX,
+)
 
 logging.basicConfig(level=LOGGING_LEVEL, format=FORMAT)
 logger = logging.getLogger(__name__)
@@ -44,8 +53,10 @@ class MyLineEdit(QLineEdit):
         self.selectAll()
 
 
-class MusicList(QTableWidget):
+class Playlist(QTableWidget):
     urls: PlaylistType = dict()
+    done_loading = QtCore.pyqtSignal()
+    error_occurred = QtCore.pyqtSignal(Exception)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -65,6 +76,9 @@ class MusicList(QTableWidget):
 
         self.is_downloads_playlist = False
 
+        self.playlist_loading_thread = QThread()
+        self.playlist_loader = tasks.PlaylistLoader(self)
+
     def set_downloads_playlist_mode(self):
         """
         set "self.is_downloads_playlist" to true and enable its feature
@@ -72,41 +86,52 @@ class MusicList(QTableWidget):
         self.is_downloads_playlist = True
 
     def load_music(self, playlist_name: str = ""):
-        playlist_name = PLAYLIST_DIRECTORY + playlist_name
-        if self.is_downloads_playlist:
-            playlist_name = DOWNLOADS_PLAYLIST
+        self.playlist_loading_thread = QThread()
 
-        if not os.path.isdir(playlist_name):
-            match self.is_downloads_playlist:
-                case True:
-                    os.makedirs(DOWNLOADS_PLAYLIST)
-                case False:
-                    QMessageBox.warning(
-                        self.top_widget,
-                        "Playlist Does Not Exist",
-                        "This playlist does not exist! Check if you accidentally delete it or what!",
-                    )
-                    
-        match self.is_downloads_playlist:
-            case True:
-                for filename in os.listdir(playlist_name):
-                    url = YOUTUBE_PREFIX + filename
-                    try:
-                        video = pytube.YouTube(url)
-                        self.urls.update({
-                            filename: {
-                                "thumbnail_url": video.thumbnail_url,
-                                "title": video.title,
-                                "author": video.author
-                            }
-                        })
-                        logger.debug(self.urls)
-                    except Exception as error:
-                        logger.error("Something went wrong! %s", error)
-            case False:
-                ...
-        
-            
+        self.playlist_loader.moveToThread(self.playlist_loading_thread)
+        self.playlist_loader.done_loading.connect(self.playlist_loading_thread.quit)
+
+        self.playlist_loading_thread.started.connect(
+            partial(self.playlist_loader.load, playlist_name)
+        )
+        self.playlist_loading_thread.start()
+        ...
+        # playlist_name = PLAYLIST_DIRECTORY + playlist_name
+        # if self.is_downloads_playlist:
+        #     playlist_name = DOWNLOADS_PLAYLIST
+
+        # if not os.path.isdir(playlist_name):
+        #     match self.is_downloads_playlist:
+        #         case True:
+        #             os.makedirs(DOWNLOADS_PLAYLIST)
+        #         case False:
+        #             QMessageBox.warning(
+        #                 self.top_widget,
+        #                 "Playlist Does Not Exist",
+        #                 "This playlist does not exist! Check if you accidentally delete it or what!",
+        #             )
+
+        # match self.is_downloads_playlist:
+        #     case True:
+        #         for filename in os.listdir(playlist_name):
+        #             url = YOUTUBE_PREFIX + filename
+        #             try:
+        #                 video = pytube.YouTube(url)
+        #                 self.urls.update({
+        #                     filename: {
+        #                         "thumbnail_url": video.thumbnail_url,
+        #                         "title": video.title,
+        #                         "author": video.author
+        #                     }
+        #                 })
+        #                 logger.debug(self.urls)
+        #             except Exception as error:
+        #                 logger.error("Something went wrong! %s", error)
+        #                 self.error_occurred.emit(error)
+        #     case False:
+        #         ...
+
+        # self.done_loading.emit()
 
     # def test(self):
     #     self.urls.update(
