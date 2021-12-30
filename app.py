@@ -1,11 +1,11 @@
 import time
 import datetime
 import logging
-from types import NoneType
+import urllib.request as urlreq
 import pytube
 import tasks
 
-from PyQt6.QtCore import QThread, QTimer, pyqtSlot
+from PyQt6.QtCore import QDateTime, QThread, QTimer, pyqtSlot
 from PyQt6.QtWidgets import (
     QDialog,
     QHeaderView,
@@ -27,6 +27,7 @@ from my_widget import DownloadButton
 from PyQt6 import QtGui
 from app_settings import FORMAT, LOGGING_LEVEL
 from ui.playlist_ui import Ui_PlaylistWidget
+from tasks import Settings
 
 logging.basicConfig(format=FORMAT, level=LOGGING_LEVEL)
 logger = logging.getLogger(__name__)
@@ -42,6 +43,13 @@ class App(QWidget):
         # initialize variables
         self.ui = Ui_App()
         self.ui.setupUi(self)
+
+        Settings.read_settings()
+
+        self.ui.pause_button.setIcon(QtGui.QIcon("images:pause.png"))
+        self.ui.pause_button.setEnabled(False)
+        self.ui.resume_button.setIcon(QtGui.QIcon("images:resume.png"))
+        self.ui.resume_button.hide()
 
         self.ui_help_dialog = Ui_HelpDialog()
         self.help_dialog = QDialog()
@@ -87,7 +95,7 @@ class App(QWidget):
         ui_search_menu: Ui_SearchMenu = self.add_widget(Ui_SearchMenu(), "search_menu")
         ui_search_menu.results.hide()
         ui_search_menu.results.horizontalHeader().setSectionResizeMode(
-            QHeaderView.ResizeMode.ResizeToContents
+            QHeaderView.ResizeMode.Stretch
         )
         ui_search_menu.results.setVerticalScrollMode(
             QTableWidget.ScrollMode.ScrollPerPixel
@@ -95,6 +103,7 @@ class App(QWidget):
         ui_search_menu.results.setHorizontalScrollMode(
             QTableWidget.ScrollMode.ScrollPerPixel
         )
+        ui_search_menu.results.horizontalHeader().setStretchLastSection(True)
         ui_search_menu.results.verticalScrollBar().setSingleStep(20)
 
         ui_playlist: Ui_PlaylistWidget = self.add_widget(
@@ -103,7 +112,8 @@ class App(QWidget):
         ui_playlist.playlist.set_downloads_playlist_mode()
         ui_playlist.playlist.load_music()
 
-        # self.get_widget("playlist_ui", 0).show()
+        self.get_widget("playlist_ui", 0).show()
+        self.get_widget("playlist_ui", 0).hide()
 
         self.get_widget("welcome_menu", 0).show()
 
@@ -129,6 +139,78 @@ class App(QWidget):
         self.ui_download_directly.cancel_button.clicked.connect(
             self.download_directly_dialog.hide
         )
+        self.ui.playlist_button.clicked.connect(
+            lambda: (
+                self.hide_all_widget(),
+                self.get_widget("playlist_ui", 0).show(),
+            )
+        )
+        self.ui.home_button.clicked.connect(
+            lambda: (self.hide_all_widget(), self.get_widget("welcome_menu", 0).show())
+        )
+
+        ui_playlist.playlist.has_music.connect(
+            lambda: self.ui.pause_button.setEnabled(True)
+        )
+
+        self.ui.pause_button.clicked.connect(
+            lambda: (
+                ui_playlist.playlist.resume(),
+                self.ui.pause_button.hide(),
+                self.ui.resume_button.show(),
+            )
+        )
+
+        self.ui.resume_button.clicked.connect(
+            lambda: (
+                ui_playlist.playlist.pause(),
+                self.ui.pause_button.show(),
+                self.ui.resume_button.hide(),
+            )
+        )
+
+        self.ui.forward_button.clicked.connect(ui_playlist.playlist.forward)
+        self.ui.backward_button.clicked.connect(ui_playlist.playlist.backward)
+
+        self.ui.progress_bar.setEnabled(False)
+        ui_playlist.playlist.has_music.connect(
+            lambda: (self.ui.progress_bar.setEnabled(True),)
+        )
+        ui_playlist.playlist.player.durationChanged.connect(
+            lambda duration: (
+                self.ui.progress_bar.blockSignals(True),
+                self.ui.progress_bar.setMaximum(duration),
+                self.ui.total_duration.setText(
+                    QDateTime.fromMSecsSinceEpoch(duration).toString("m:ss")
+                ),
+                self.ui.progress_bar.blockSignals(False),
+            ),
+        )
+        ui_playlist.playlist.player.positionChanged.connect(
+            lambda position: (
+                self.ui.progress_bar.blockSignals(True),
+                self.ui.progress_bar.setSliderPosition(position),
+                self.ui.duration_passed.setText(
+                    QDateTime.fromMSecsSinceEpoch(position).toString("m:ss")
+                ),
+                self.ui.progress_bar.blockSignals(False),
+            )
+        )
+
+        self.ui.progress_bar.valueChanged.connect(
+            lambda value: (ui_playlist.playlist.player.setPosition(value),)
+        )
+
+        self.ui.progress_bar.setPageStep(10 * 1000)
+        self.ui.progress_bar.setSingleStep(5 * 1000)
+
+        self.ui.volume_bar.valueChanged.connect(
+            lambda value: (
+                ui_playlist.playlist.audio_output.setVolume(value / 100),
+                Settings.set_volume(value),
+            )
+        )
+        self.ui.volume_bar.setValue(Settings.volume)
 
     def add_widget(self, ui, name: str):
         menu = QWidget(self.ui.main_menu)
@@ -147,6 +229,13 @@ class App(QWidget):
         default is 1 so this function will return ui
         """
         return self.mainmenu_widgets[name][index]
+
+    def hide_all_widget(self):
+        """
+        hide all the widgets that are possibly shown
+        """
+        for widget in self.mainmenu_widgets.values():
+            widget[0].hide()
 
     def delete_cell_widgets(self):
         ui_search_menu: Ui_SearchMenu = self.get_widget("search_menu")
@@ -203,7 +292,11 @@ class App(QWidget):
         )
 
         self.image_loading_thread.started.connect(
-            partial(self.image_loader.load_images, search_result, self.size())
+            partial(
+                self.image_loader.load_images,
+                search_result,
+                ui_search_menu.results.size(),
+            )
         )
         self.image_loading_thread.start()
 
@@ -221,13 +314,13 @@ class App(QWidget):
         if not self.ui.search_bar.text():
             return
 
+        self.hide_all_widget()
+        self.get_widget("search_menu", 0).show()
+
         ui_search_menu: Ui_SearchMenu = self.mainmenu_widgets["search_menu"][1]
         ui_search_menu.searching_label.setText(f"Searching {self.ui.search_bar.text()}")
         ui_search_menu.searching_label.show()
         ui_search_menu.results.hide()
-
-        self.get_widget("search_menu", 0).show()
-        self.get_widget("welcome_menu", 0).hide()
 
         if self.image_loading_thread.isRunning():
             self.image_loader.interrupt = True
@@ -310,8 +403,10 @@ class App(QWidget):
         )
         App.video_download_manager.download()
 
-    @pyqtSlot(str, Exception, bool)
-    def done_downloading(self, link: str, error: Exception, error_exist: bool):
+    @pyqtSlot(bytes, str, Exception, bool)
+    def done_downloading(
+        self, data: bytes, link: str, error: Exception, error_exist: bool
+    ):
         video = pytube.YouTube(link)
 
         if error_exist:
@@ -327,6 +422,12 @@ class App(QWidget):
             "Done Downloading!",
             f'Video "{video.title}" has been successfully downloaded',
         )
+
+        # data = urlreq.urlopen(video.thumbnail_url).read()
+
+        ui_playlist: Ui_PlaylistWidget = self.get_widget("playlist_ui")
+        ui_playlist.playlist.push_item(data, video.title, video.author)
+        ui_playlist.playlist.urls.append(video.video_id)
 
     @pyqtSlot(str, QPushButton)
     def download_directly_from_url(self, url: str, button: QPushButton):
@@ -362,3 +463,8 @@ class App(QWidget):
             partial(self.set_button_downloaded, button)
         )
         App.video_download_manager.download()
+
+    def closeEvent(self, a0: QtGui.QCloseEvent) -> None:
+        Settings.save_settings()
+
+        return super().closeEvent(a0)

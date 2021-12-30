@@ -10,5 +10,9 @@ DOWNLOAD_AUDIO_TO = "downloads"
 DOWNLOADS_PLAYLIST = DOWNLOAD_AUDIO_TO
 
 PLAYLIST_DIRECTORY = "./playlists/"
+DOWNLOADS_DIRECTORY = "./downloads/"
 
 YOUTUBE_PREFIX = "https://www.youtube.com/watch?v="
+
+THUMBNAIL_FOLDER = "thumbnails/"
+SETTINGS_FILE = "settings.json"

@@ -28,6 +28,9 @@
    </property>
    <item>
     <widget class="Playlist" name="playlist">
+     <property name="selectionBehavior">
+      <enum>QAbstractItemView::SelectRows</enum>
+     </property>
      <property name="rowCount">
       <number>0</number>
      </property>

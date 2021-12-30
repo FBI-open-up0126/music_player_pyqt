@@ -3,10 +3,11 @@ import os
 import pytube
 import youtubesearchpython as ytsearch
 import urllib.request as urlreq
+import json
 
-from PyQt6.QtCore import QObject, QSize, QThread
+from PyQt6.QtCore import QObject, QSize, QThread, Qt
 from PyQt6 import QtCore
-from app_settings import DOWNLOAD_AUDIO_TO, DOWNLOADS_PLAYLIST, FORMAT, LOGGING_LEVEL, PLAYLIST_DIRECTORY, SEARCH_LIMIT, YOUTUBE_PREFIX
+from app_settings import DOWNLOAD_AUDIO_TO, DOWNLOADS_PLAYLIST, FORMAT, LOGGING_LEVEL, PLAYLIST_DIRECTORY, SEARCH_LIMIT, SETTINGS_FILE, THUMBNAIL_FOLDER, YOUTUBE_PREFIX
 from PyQt6.QtGui import QPixmap
 from PyQt6.QtWidgets import QMessageBox, QWidget
 
@@ -53,17 +54,19 @@ class ImageLoader(QObject):
                 return
 
             try:
-                data = urlreq.urlopen(result["thumbnails"][0]["url"]).read()
+                url = result["thumbnails"][0]["url"]
+                data = urlreq.urlopen(url).read()
 
                 image = QPixmap()
                 image.loadFromData(data)
 
                 height_to_width_ratio = image.height() / image.width()
-                reduced_width = int(widget_size.width() / 4.5)
+                reduced_width = int(widget_size.width() / 4)
                 reduced_height = int(reduced_width * height_to_width_ratio)
 
-                image = image.scaled(reduced_width, reduced_height)
+                image = image.scaled(reduced_width, reduced_height, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
                 self.thumbnails.append(image)
+                
             except Exception as error:
                 logger.error("Failed to load image! (Error: %s)", error)
                 self.thumbnails.append(QPixmap())
@@ -77,7 +80,7 @@ class ImageLoader(QObject):
 
 class VideoDownloadManager(QObject):
     done = QtCore.pyqtSignal()
-    done_downloading = QtCore.pyqtSignal(str, Exception, bool)
+    done_downloading = QtCore.pyqtSignal(bytes, str, Exception, bool)
     download_thread = QThread()
     downloader = None
 
@@ -127,11 +130,17 @@ class VideoDownload(QObject):
                     filename=video.video_id,
                 )
                 logger.info("Downloaded Successful!")
+                
+                data = urlreq.urlopen(video.thumbnail_url).read()
+                
+                with open(THUMBNAIL_FOLDER + video.video_id, mode="wb+") as file:
+                    file.write(data)
+                
             except Exception as error:
                 logger.error("Error while downloading video: %s", error)
-                self.manager.done_downloading.emit(link, error, True)
+                self.manager.done_downloading.emit(bytes(), link, error, True)
                 continue
-            self.manager.done_downloading.emit(link, Exception(), False)
+            self.manager.done_downloading.emit(data, link, Exception(), False)
             self.download_list.pop(0)
 
         self.manager.done.emit()
@@ -140,6 +149,7 @@ class VideoDownload(QObject):
 class PlaylistLoader(QObject):
     done_loading = QtCore.pyqtSignal()
     error_occurred = QtCore.pyqtSignal(Exception)
+    item_loaded = QtCore.pyqtSignal(bytes, str, str)
 
     def __init__(self, playlist_widget: Playlist, parent: QObject | None = None) -> None:
         super().__init__(parent)
@@ -151,15 +161,16 @@ class PlaylistLoader(QObject):
         if is_downloads_playlist:
             playlist_name = DOWNLOADS_PLAYLIST
 
-        if not os.path.isdir(playlist_name):
-            match is_downloads_playlist:
-                case True:
+        match is_downloads_playlist:
+            case True: 
+                if not os.path.isdir(playlist_name):
                     os.makedirs(DOWNLOADS_PLAYLIST)
-                case False:
+            case False:
+                if not os.path.exists(PLAYLIST_DIRECTORY + playlist_name):
                     QMessageBox.warning(
-                        self.top_widget,
-                        "Playlist Does Not Exist",
-                        "This playlist does not exist! Check if you accidentally delete it or what!",
+                        self.playlist_widget.top_widget,
+                        f"Playlist \"{playlist_name}\" does not exist".title(),
+                        f"Playlist \"{playlist_name}\" does not exist! Check if you accidentally delete it or what!",
                     )
                     
         match is_downloads_playlist:
@@ -168,14 +179,13 @@ class PlaylistLoader(QObject):
                     url = YOUTUBE_PREFIX + filename
                     try:
                         video = pytube.YouTube(url)
-                        self.playlist_widget.urls.update({
-                            filename: {
-                                "thumbnail_url": video.thumbnail_url,
-                                "title": video.title,
-                                "author": video.author
-                            }
-                        })
-                        logger.debug(f"""{filename}: {self.playlist_widget.urls[filename]["title"]}""")
+                        
+                        self.playlist_widget.referenced_url.append(video.video_id);
+                        
+                        with open(THUMBNAIL_FOLDER + video.video_id, "rb") as file:
+                            image_data = file.read()
+                        
+                        self.item_loaded.emit(image_data, video.title, video.author)
                     except Exception as error:
                         logger.error("Something went wrong! %s", error)
                         self.error_occurred.emit(error)
@@ -183,3 +193,31 @@ class PlaylistLoader(QObject):
                 ...
         
         self.done_loading.emit()
+        
+class Settings:
+    volume: int = 30
+        
+    @classmethod
+    def read_settings(cls):
+        if not os.path.exists(SETTINGS_FILE):
+            return
+        
+        with open(SETTINGS_FILE, mode="r") as file:
+            json_data = file.read()
+            json_data: dict = json.loads(json_data)
+            cls.volume = json_data.get("volume", cls.volume)
+        
+    @classmethod
+    def save_settings(cls):
+        json_data = {
+            "volume": cls.volume,
+        }
+        json_data = json.dumps(json_data, indent=2)
+        logger.debug(json_data)
+        
+        with open(SETTINGS_FILE, mode="w+") as file:
+            file.write(json_data)
+        
+    @classmethod
+    def set_volume(cls, volume: int):
+        cls.volume = volume

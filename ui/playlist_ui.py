@@ -17,6 +17,7 @@ class Ui_PlaylistWidget(object):
         self.verticalLayout.setContentsMargins(0, 0, 0, 0)
         self.verticalLayout.setObjectName("verticalLayout")
         self.playlist = Playlist(PlaylistWidget)
+        self.playlist.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectionBehavior.SelectRows)
         self.playlist.setRowCount(0)
         self.playlist.setColumnCount(3)
         self.playlist.setObjectName("playlist")
