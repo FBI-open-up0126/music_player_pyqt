@@ -5,13 +5,13 @@ import youtubesearchpython as ytsearch
 import urllib.request as urlreq
 import json
 
-from PyQt6.QtCore import QObject, QSize, QThread, Qt
+from PyQt6.QtCore import QMutex, QObject, QSize, QThread, Qt
 from PyQt6 import QtCore
 from app_settings import DOWNLOAD_AUDIO_TO, DOWNLOADS_PLAYLIST, FORMAT, LOGGING_LEVEL, PLAYLIST_DIRECTORY, SEARCH_LIMIT, SETTINGS_FILE, THUMBNAIL_FOLDER, YOUTUBE_PREFIX
 from PyQt6.QtGui import QPixmap
 from PyQt6.QtWidgets import QMessageBox, QWidget
 
-from my_widget import Playlist
+from my_widget import PlaybackMode, Playlist
 
 logging.basicConfig(level=LOGGING_LEVEL, format=FORMAT)
 logger = logging.getLogger(__name__)
@@ -83,6 +83,8 @@ class VideoDownloadManager(QObject):
     done_downloading = QtCore.pyqtSignal(bytes, str, Exception, bool)
     download_thread = QThread()
     downloader = None
+    
+    mutex = QMutex()
 
     def __init__(self):
         QObject.__init__(self)
@@ -104,7 +106,9 @@ class VideoDownloadManager(QObject):
         self.download_thread.start()
 
     def add_download(self, link: str):
+        self.mutex.lock()
         VideoDownloadManager.downloader.download_list.append(link)
+        self.mutex.unlock()
 
         
 class VideoDownload(QObject):
@@ -119,7 +123,9 @@ class VideoDownload(QObject):
         Self = VideoDownload
         while Self.download_list:
             logger.info(f"download list links: {Self.download_list}")
+            self.manager.mutex.lock()
             link = Self.download_list[0]
+            self.manager.mutex.unlock()
             try:
                 logger.info(f"Starting to download {link}")
                 video = pytube.YouTube(link)
@@ -141,7 +147,9 @@ class VideoDownload(QObject):
                 self.manager.done_downloading.emit(bytes(), link, error, True)
                 continue
             self.manager.done_downloading.emit(data, link, Exception(), False)
+            self.manager.mutex.lock()
             self.download_list.pop(0)
+            self.manager.mutex.unlock()
 
         self.manager.done.emit()
 
@@ -194,8 +202,12 @@ class PlaylistLoader(QObject):
         
         self.done_loading.emit()
         
-class Settings:
+class Settings(QObject):
     volume: int = 30
+    playback_mode: PlaybackMode = PlaybackMode.Loop
+    
+    def __init__(self, parent: QObject = None) -> None:
+        super().__init__(parent)
         
     @classmethod
     def read_settings(cls):
@@ -206,18 +218,16 @@ class Settings:
             json_data = file.read()
             json_data: dict = json.loads(json_data)
             cls.volume = json_data.get("volume", cls.volume)
+            cls.playback_mode = PlaybackMode[json_data.get("playback_mode", cls.playback_mode.name)]
         
     @classmethod
-    def save_settings(cls):
+    def save_settings(cls, volume: int = None, playback_mode: PlaybackMode = PlaybackMode.Loop):
         json_data = {
-            "volume": cls.volume,
+            "volume": cls.volume if volume is None else volume,
+            "playback_mode": playback_mode.name
         }
         json_data = json.dumps(json_data, indent=2)
         logger.debug(json_data)
         
         with open(SETTINGS_FILE, mode="w+") as file:
             file.write(json_data)
-        
-    @classmethod
-    def set_volume(cls, volume: int):
-        cls.volume = volume

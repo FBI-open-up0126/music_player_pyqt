@@ -23,7 +23,7 @@ from ui.help_dialog import Ui_HelpDialog
 from ui.search_menu import Ui_SearchMenu
 from ui.welcome_menu import Ui_WelcomeMenu
 from ui.download_from_url_dialog import Ui_DownloadFromURL
-from my_widget import DownloadButton
+from my_widget import DownloadButton, PlaybackMode
 from PyQt6 import QtGui
 from app_settings import FORMAT, LOGGING_LEVEL
 from ui.playlist_ui import Ui_PlaylistWidget
@@ -50,6 +50,33 @@ class App(QWidget):
         self.ui.pause_button.setEnabled(False)
         self.ui.resume_button.setIcon(QtGui.QIcon("images:resume.png"))
         self.ui.resume_button.hide()
+
+        self.ui.backward_button.setIcon(QtGui.QIcon("images:backward.png"))
+        self.ui.backward_button.setEnabled(False)
+
+        self.ui.forward_button.setIcon(QtGui.QIcon("images:forward.png"))
+        self.ui.forward_button.setEnabled(False)
+
+        self.ui.playbackmode_loop.setIcon(QtGui.QIcon("images:loop.png"))
+        self.ui.playbackmode_looponce.setIcon(QtGui.QIcon("images:repeat.png"))
+        self.ui.playbackmode_random.setIcon(QtGui.QIcon("images:random.png"))
+        self.ui.playbackmode_sequential.setIcon(QtGui.QIcon("images:sequential.png"))
+
+        self.ui.playbackmode_loop.hide()
+        self.ui.playbackmode_looponce.hide()
+        self.ui.playbackmode_random.hide()
+        self.ui.playbackmode_sequential.hide()
+        
+        match Settings.playback_mode:
+            case PlaybackMode.Loop:
+                self.ui.playbackmode_loop.show()
+            case PlaybackMode.LoopOnce:
+                self.ui.playbackmode_looponce.show()
+            case PlaybackMode.Sequential:
+                self.ui.playbackmode_sequential.show()
+            case PlaybackMode.Random:
+                self.ui.playbackmode_random.show()
+                
 
         self.ui_help_dialog = Ui_HelpDialog()
         self.help_dialog = QDialog()
@@ -111,6 +138,7 @@ class App(QWidget):
         )
         ui_playlist.playlist.set_downloads_playlist_mode()
         ui_playlist.playlist.load_music()
+        ui_playlist.playlist.set_playback_mode(Settings.playback_mode)
 
         self.get_widget("playlist_ui", 0).show()
         self.get_widget("playlist_ui", 0).hide()
@@ -150,7 +178,11 @@ class App(QWidget):
         )
 
         ui_playlist.playlist.has_music.connect(
-            lambda: self.ui.pause_button.setEnabled(True)
+            lambda: (
+                self.ui.pause_button.setEnabled(True),
+                self.ui.backward_button.setEnabled(True),
+                self.ui.forward_button.setEnabled(True),
+            )
         )
 
         self.ui.pause_button.clicked.connect(
@@ -176,7 +208,7 @@ class App(QWidget):
         ui_playlist.playlist.has_music.connect(
             lambda: (self.ui.progress_bar.setEnabled(True),)
         )
-        ui_playlist.playlist.player.durationChanged.connect(
+        ui_playlist.playlist.media_player.durationChanged.connect(
             lambda duration: (
                 self.ui.progress_bar.blockSignals(True),
                 self.ui.progress_bar.setMaximum(duration),
@@ -186,7 +218,7 @@ class App(QWidget):
                 self.ui.progress_bar.blockSignals(False),
             ),
         )
-        ui_playlist.playlist.player.positionChanged.connect(
+        ui_playlist.playlist.media_player.positionChanged.connect(
             lambda position: (
                 self.ui.progress_bar.blockSignals(True),
                 self.ui.progress_bar.setSliderPosition(position),
@@ -198,7 +230,7 @@ class App(QWidget):
         )
 
         self.ui.progress_bar.valueChanged.connect(
-            lambda value: (ui_playlist.playlist.player.setPosition(value),)
+            lambda value: (ui_playlist.playlist.media_player.setPosition(value),)
         )
 
         self.ui.progress_bar.setPageStep(10 * 1000)
@@ -207,10 +239,33 @@ class App(QWidget):
         self.ui.volume_bar.valueChanged.connect(
             lambda value: (
                 ui_playlist.playlist.audio_output.setVolume(value / 100),
-                Settings.set_volume(value),
             )
         )
         self.ui.volume_bar.setValue(Settings.volume)
+        
+        self.ui.playbackmode_loop.clicked.connect(lambda: (
+            self.ui.playbackmode_loop.hide(),
+            self.ui.playbackmode_looponce.show(),
+            ui_playlist.playlist.set_playback_mode(PlaybackMode.LoopOnce)
+        ))
+        
+        self.ui.playbackmode_looponce.clicked.connect(lambda: (
+            self.ui.playbackmode_looponce.hide(),
+            self.ui.playbackmode_sequential.show(),
+            ui_playlist.playlist.set_playback_mode(PlaybackMode.Sequential)
+        ))
+            
+        self.ui.playbackmode_sequential.clicked.connect(lambda: (
+            self.ui.playbackmode_sequential.hide(),
+            self.ui.playbackmode_random.show(),
+            ui_playlist.playlist.set_playback_mode(PlaybackMode.Random)
+        ))
+        
+        self.ui.playbackmode_random.clicked.connect(lambda: (
+            self.ui.playbackmode_random.hide(),
+            self.ui.playbackmode_loop.show(),
+            ui_playlist.playlist.set_playback_mode(PlaybackMode.Loop)
+        ))
 
     def add_widget(self, ui, name: str):
         menu = QWidget(self.ui.main_menu)
@@ -360,6 +415,8 @@ class App(QWidget):
         self.search_thread.terminate()
         self.image_loading_thread.terminate()
         self.image_loader.interrupt = True
+        
+        Settings.save_settings(volume=self.ui.volume_bar.value(), playback_mode=self.get_widget("playlist_ui").playlist.playback_mode)
 
         return super().closeEvent(a0)
 
@@ -463,8 +520,3 @@ class App(QWidget):
             partial(self.set_button_downloaded, button)
         )
         App.video_download_manager.download()
-
-    def closeEvent(self, a0: QtGui.QCloseEvent) -> None:
-        Settings.save_settings()
-
-        return super().closeEvent(a0)

@@ -17,6 +17,9 @@ class Ui_PlaylistWidget(object):
         self.verticalLayout.setContentsMargins(0, 0, 0, 0)
         self.verticalLayout.setObjectName("verticalLayout")
         self.playlist = Playlist(PlaylistWidget)
+        self.playlist.setStyleSheet("/* QTableWidget::item{ selection-background-color: rgba(255, 255, 255, 0); selection-color: rgb(0, 150, 0);} */\n"
+"\n"
+"QTableWidget::item {selection-background-color: grey; }")
         self.playlist.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectionBehavior.SelectRows)
         self.playlist.setRowCount(0)
         self.playlist.setColumnCount(3)

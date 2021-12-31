@@ -1,5 +1,7 @@
 import logging
 
+from PyQt6.QtGui import QColor
+
 
 SEARCH_LIMIT = 15
 
@@ -16,3 +18,5 @@ YOUTUBE_PREFIX = "https://www.youtube.com/watch?v="
 
 THUMBNAIL_FOLDER = "thumbnails/"
 SETTINGS_FILE = "settings.json"
+
+CURRENT_PLAYING_SONG_COLOR = QColor(0, 150, 0)

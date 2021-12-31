@@ -36,10 +36,12 @@ class Ui_App(object):
         self.horizontalLayout = QtWidgets.QHBoxLayout(self.playback_control)
         self.horizontalLayout.setObjectName("horizontalLayout")
         self.backward_button = QtWidgets.QToolButton(self.playback_control)
+        self.backward_button.setCursor(QtGui.QCursor(QtCore.Qt.CursorShape.PointingHandCursor))
+        self.backward_button.setToolTipDuration(-1)
         self.backward_button.setStyleSheet("QToolButton {\n"
 "    background-color: rgba(0, 0, 0, 0);\n"
 "}")
-        self.backward_button.setIconSize(QtCore.QSize(32, 32))
+        self.backward_button.setIconSize(QtCore.QSize(40, 40))
         self.backward_button.setObjectName("backward_button")
         self.horizontalLayout.addWidget(self.backward_button)
         self.pause_button = QtWidgets.QToolButton(self.playback_control)
@@ -59,10 +61,11 @@ class Ui_App(object):
         self.resume_button.setObjectName("resume_button")
         self.horizontalLayout.addWidget(self.resume_button)
         self.forward_button = QtWidgets.QToolButton(self.playback_control)
+        self.forward_button.setCursor(QtGui.QCursor(QtCore.Qt.CursorShape.PointingHandCursor))
         self.forward_button.setStyleSheet("QToolButton {\n"
 "    background-color: rgba(0, 0, 0, 0);\n"
 "}")
-        self.forward_button.setIconSize(QtCore.QSize(32, 32))
+        self.forward_button.setIconSize(QtCore.QSize(40, 40))
         self.forward_button.setObjectName("forward_button")
         self.horizontalLayout.addWidget(self.forward_button)
         spacerItem = QtWidgets.QSpacerItem(40, 20, QtWidgets.QSizePolicy.Policy.Minimum, QtWidgets.QSizePolicy.Policy.Minimum)
@@ -90,7 +93,39 @@ class Ui_App(object):
         self.volume_bar.setOrientation(QtCore.Qt.Orientation.Horizontal)
         self.volume_bar.setObjectName("volume_bar")
         self.horizontalLayout.addWidget(self.volume_bar)
-        spacerItem2 = QtWidgets.QSpacerItem(80, 20, QtWidgets.QSizePolicy.Policy.Minimum, QtWidgets.QSizePolicy.Policy.Minimum)
+        self.playbackmode_loop = QtWidgets.QToolButton(self.playback_control)
+        self.playbackmode_loop.setCursor(QtGui.QCursor(QtCore.Qt.CursorShape.PointingHandCursor))
+        self.playbackmode_loop.setStyleSheet("QToolButton {\n"
+"    background-color: rgba(0, 0, 0, 0);\n"
+"}")
+        self.playbackmode_loop.setIconSize(QtCore.QSize(48, 48))
+        self.playbackmode_loop.setObjectName("playbackmode_loop")
+        self.horizontalLayout.addWidget(self.playbackmode_loop)
+        self.playbackmode_sequential = QtWidgets.QToolButton(self.playback_control)
+        self.playbackmode_sequential.setCursor(QtGui.QCursor(QtCore.Qt.CursorShape.PointingHandCursor))
+        self.playbackmode_sequential.setStyleSheet("QToolButton {\n"
+"    background-color: rgba(0, 0, 0, 0);\n"
+"}")
+        self.playbackmode_sequential.setIconSize(QtCore.QSize(48, 48))
+        self.playbackmode_sequential.setObjectName("playbackmode_sequential")
+        self.horizontalLayout.addWidget(self.playbackmode_sequential)
+        self.playbackmode_looponce = QtWidgets.QToolButton(self.playback_control)
+        self.playbackmode_looponce.setCursor(QtGui.QCursor(QtCore.Qt.CursorShape.PointingHandCursor))
+        self.playbackmode_looponce.setStyleSheet("QToolButton {\n"
+"    background-color: rgba(0, 0, 0, 0);\n"
+"}")
+        self.playbackmode_looponce.setIconSize(QtCore.QSize(48, 48))
+        self.playbackmode_looponce.setObjectName("playbackmode_looponce")
+        self.horizontalLayout.addWidget(self.playbackmode_looponce)
+        self.playbackmode_random = QtWidgets.QToolButton(self.playback_control)
+        self.playbackmode_random.setCursor(QtGui.QCursor(QtCore.Qt.CursorShape.PointingHandCursor))
+        self.playbackmode_random.setStyleSheet("QToolButton {\n"
+"    background-color: rgba(0, 0, 0, 0);\n"
+"}")
+        self.playbackmode_random.setIconSize(QtCore.QSize(48, 48))
+        self.playbackmode_random.setObjectName("playbackmode_random")
+        self.horizontalLayout.addWidget(self.playbackmode_random)
+        spacerItem2 = QtWidgets.QSpacerItem(20, 20, QtWidgets.QSizePolicy.Policy.Minimum, QtWidgets.QSizePolicy.Policy.Minimum)
         self.horizontalLayout.addItem(spacerItem2)
         self.gridLayout.addWidget(self.playback_control, 3, 0, 1, 2)
         self.main_menu = QtWidgets.QWidget(App)
@@ -169,6 +204,10 @@ class Ui_App(object):
         self.duration_passed.setText(_translate("App", "0:00"))
         self.total_duration.setText(_translate("App", "0:00"))
         self.label.setText(_translate("App", "Volume"))
+        self.playbackmode_loop.setText(_translate("App", "..."))
+        self.playbackmode_sequential.setText(_translate("App", "..."))
+        self.playbackmode_looponce.setText(_translate("App", "..."))
+        self.playbackmode_random.setText(_translate("App", "..."))
         self.home_button.setText(_translate("App", "Home"))
         self.download_from_url_button.setToolTip(_translate("App", "Download something directly from a given link"))
         self.download_from_url_button.setText(_translate("App", "Download from URL"))
