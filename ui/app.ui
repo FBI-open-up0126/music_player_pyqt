@@ -451,6 +451,11 @@
       </item>
       <item>
        <widget class="QPushButton" name="playlist_button">
+        <property name="font">
+         <font>
+          <pointsize>12</pointsize>
+         </font>
+        </property>
         <property name="cursor">
          <cursorShape>PointingHandCursor</cursorShape>
         </property>
@@ -479,18 +484,34 @@ QPushButton:hover:!pressed {
        </widget>
       </item>
       <item>
-       <widget class="QListWidget" name="listWidget">
+       <widget class="PlaylistsHandler" name="playlists">
         <property name="maximumSize">
          <size>
           <width>160</width>
           <height>16777215</height>
          </size>
         </property>
+        <property name="font">
+         <font>
+          <pointsize>12</pointsize>
+         </font>
+        </property>
+        <property name="cursor" stdset="0">
+         <cursorShape>PointingHandCursor</cursorShape>
+        </property>
         <property name="styleSheet">
          <string notr="true">QListWidget {
 	background-color: rgba(0, 0, 0, 0);
 	border: none;
-}</string>
+}
+
+QListWidget::item:hover,
+QListWidget::item:disabled:hover,
+QListWidget::item:hover:!active,
+{background-color: transparent; color: rgb(115, 115, 115);}</string>
+        </property>
+        <property name="spacing">
+         <number>10</number>
         </property>
         <property name="itemAlignment">
          <set>Qt::AlignCenter</set>
@@ -502,6 +523,13 @@ QPushButton:hover:!pressed {
    </item>
   </layout>
  </widget>
+ <customwidgets>
+  <customwidget>
+   <class>PlaylistsHandler</class>
+   <extends>QListWidget</extends>
+   <header>my_widget.h</header>
+  </customwidget>
+ </customwidgets>
  <resources/>
  <connections/>
 </ui>

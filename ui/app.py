@@ -159,6 +159,9 @@ class Ui_App(object):
         spacerItem4 = QtWidgets.QSpacerItem(20, 10, QtWidgets.QSizePolicy.Policy.Minimum, QtWidgets.QSizePolicy.Policy.Minimum)
         self.verticalLayout.addItem(spacerItem4)
         self.playlist_button = QtWidgets.QPushButton(self.other_menu)
+        font = QtGui.QFont()
+        font.setPointSize(12)
+        self.playlist_button.setFont(font)
         self.playlist_button.setCursor(QtGui.QCursor(QtCore.Qt.CursorShape.PointingHandCursor))
         self.playlist_button.setStyleSheet("QPushButton {\n"
 "    background-color: rgba(255, 255, 255, 0);\n"
@@ -174,15 +177,24 @@ class Ui_App(object):
         self.line.setFrameShadow(QtWidgets.QFrame.Shadow.Sunken)
         self.line.setObjectName("line")
         self.verticalLayout.addWidget(self.line)
-        self.listWidget = QtWidgets.QListWidget(self.other_menu)
-        self.listWidget.setMaximumSize(QtCore.QSize(160, 16777215))
-        self.listWidget.setStyleSheet("QListWidget {\n"
+        self.playlists = PlaylistsHandler(self.other_menu)
+        self.playlists.setMaximumSize(QtCore.QSize(160, 16777215))
+        font = QtGui.QFont()
+        font.setPointSize(12)
+        self.playlists.setFont(font)
+        self.playlists.viewport().setProperty("cursor", QtGui.QCursor(QtCore.Qt.CursorShape.PointingHandCursor))
+        self.playlists.setStyleSheet("QListWidget {\n"
 "    background-color: rgba(0, 0, 0, 0);\n"
 "    border: none;\n"
-"}")
-        self.listWidget.setItemAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
-        self.listWidget.setObjectName("listWidget")
-        self.verticalLayout.addWidget(self.listWidget)
+"}\n"
+"\n"
+"QListWidget::item:hover,\n"
+"QListWidget::item:disabled:hover,\n"
+"QListWidget::item:hover:!active,\n"
+"{background-color: transparent; color: rgb(115, 115, 115);}")
+        self.playlists.setItemAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        self.playlists.setObjectName("playlists")
+        self.verticalLayout.addWidget(self.playlists)
         self.gridLayout.addWidget(self.other_menu, 2, 0, 1, 1)
 
         self.retranslateUi(App)
@@ -215,3 +227,4 @@ class Ui_App(object):
         self.setting_button.setText(_translate("App", "Settings"))
         self.playlist_button.setToolTip(_translate("App", "All the downloaded audio are stored in here"))
         self.playlist_button.setText(_translate("App", "Downloads"))
+from my_widget import PlaylistsHandler

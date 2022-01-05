@@ -1,40 +1,50 @@
 import logging
 import json
 import os
-import pytube
-import urllib.request as urlreq
+from PyQt6.sip import delete
+import coloredlogs
 import tasks
-import time
 import PyQt6.QtNetwork
 import enum
 import random
 
-from typing import Optional
+from typing import Iterable, Optional
 from PyQt6 import QtGui
-from PyQt6.QtCore import QPoint, QThread, QUrl, Qt, pyqtSlot
-from PyQt6.QtGui import QAction, QBrush, QColor, QPixmap, QResizeEvent
+from PyQt6.QtCore import QModelIndex, QPoint, QThread, QUrl, Qt, pyqtSlot
+from PyQt6.QtGui import QAction, QBrush, QColor, QDropEvent, QPixmap, QResizeEvent, qRgb
 from PyQt6.QtWidgets import (
+    QAbstractItemView,
+    QDial,
+    QDialog,
+    QHBoxLayout,
     QHeaderView,
     QLabel,
     QLineEdit,
+    QListWidget,
+    QListWidgetItem,
     QMenu,
     QMessageBox,
     QPushButton,
     QTableWidget,
     QTableWidgetItem,
+    QVBoxLayout,
     QWidget,
 )
 from app_settings import (
     CURRENT_PLAYING_SONG_COLOR,
+    DOWNLOAD_AUDIO_TO,
     DOWNLOADS_DIRECTORY,
     FORMAT,
     LOGGING_LEVEL,
+    PLAYLIST_DIRECTORY,
+    THUMBNAIL_FOLDER,
 )
 from functools import partial
 from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput
 from PyQt6 import QtCore
+from ui.add_playlist_ui import Ui_AddPlaylist
 
-logging.basicConfig(level=LOGGING_LEVEL, format=FORMAT)
+coloredlogs.install(fmt=FORMAT, level=LOGGING_LEVEL)
 logger = logging.getLogger(__name__)
 
 PlaylistType = list[dict[str, str]]
@@ -72,7 +82,7 @@ class PlaybackMode(enum.Enum):
 
 class Playlist(QTableWidget):
     # urls: PlaylistType = list()
-    urls = list()
+    urls = dict()
     images = list()
     has_music = QtCore.pyqtSignal(int)
     # done_loading = QtCore.pyqtSignal()
@@ -99,10 +109,10 @@ class Playlist(QTableWidget):
 
         self.verticalScrollBar().setSingleStep(20)
 
-        self.referenced_url = list()
-        self.referenced_images = list()
+        self.referencing_url = Playlist.urls
+        self.referencing_images = Playlist.images
 
-        self.is_downloads_playlist = False
+        self.is_downloads_playlist = True
 
         self.playlist_loading_thread = QThread()
         self.playlist_loader = tasks.PlaylistLoader(self)
@@ -113,7 +123,7 @@ class Playlist(QTableWidget):
         self.media_player = QMediaPlayer()
         self.media_player.setAudioOutput(self.audio_output)
 
-        self.current_playing_index = 0
+        self.current_playing_index = -1
 
         self.cellClicked.connect(self.change_music)
 
@@ -125,6 +135,42 @@ class Playlist(QTableWidget):
 
         self.media_player.mediaStatusChanged.connect(self.media_status_changed)
 
+        self.setDragEnabled(True)
+        self.setAcceptDrops(True)
+        self.viewport().setAcceptDrops(True)
+        self.setDragDropOverwriteMode(False)
+        self.setDropIndicatorShown(True)
+
+        self.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+        self.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
+
+        self.download_musics_dialog = QDialog()
+        self.download_musics_dialog.setWindowTitle("Add From Playlist")
+
+        self.download_musics_listwidget = QListWidget(self.download_musics_dialog)
+        self.download_musics_listwidget.setWindowTitle("Add From Downloads")
+
+        palette = self.download_musics_listwidget.palette()
+        self.download_musics_listwidget.setStyleSheet(
+            f"QListWidget::item {{ border-bottom: 1px solid {palette.midlight().color().name()}; }} \
+            QListWidget::item:selected {{ background-color: {palette.highlight().color().name()}; color: {palette.highlightedText().color().name()}; }}"
+        )
+
+        self.vertical_layout = QVBoxLayout(self.download_musics_dialog)
+        self.vertical_layout.addWidget(self.download_musics_listwidget)
+
+        self.buttons_layout = QHBoxLayout()
+        self.vertical_layout.addLayout(self.buttons_layout)
+
+        self.confirm_add_button = QPushButton("OK", self.download_musics_listwidget)
+        self.buttons_layout.addWidget(self.confirm_add_button)
+
+        self.cancel_button = QPushButton("Cancel", self.download_musics_listwidget)
+        self.buttons_layout.addWidget(self.cancel_button)
+
+        self.confirm_add_button.clicked.connect(self.add_music)
+        self.cancel_button.clicked.connect(self.download_musics_dialog.hide)
+
     def set_downloads_playlist_mode(self):
         """
         set "self.is_downloads_playlist" to true and enable its feature
@@ -132,14 +178,26 @@ class Playlist(QTableWidget):
         it should be called right after the __init__ method of this class
         """
         self.is_downloads_playlist = True
-        self.setEditTriggers(self.EditTrigger.NoEditTriggers)
 
-        self.referenced_url = Playlist.urls
-        self.referenced_images = Playlist.images
+        self.referencing_images = Playlist.images
+        self.referencing_url = Playlist.urls
+
+        self.setRowCount(0)
+
+        if "musics" not in self.urls:
+            return
+
+        for index, music_data in enumerate(self.urls["musics"]):
+            try:
+                title = music_data["title"]
+                author = music_data["author"]
+            except Exception as error:
+                logger.error("Error Occurred: %s", error)
+                continue
+            self.push_item(self.images[index], title, author)
 
     @pyqtSlot(bytes, str, str)
     def push_item(self, data: bytes, title: str, author: str):
-        self.referenced_images.append(data)
         self.insertRow(self.rowCount())
         image = QPixmap()
         image.loadFromData(data)
@@ -150,21 +208,79 @@ class Playlist(QTableWidget):
         self.setItem(self.rowCount() - 1, 2, QTableWidgetItem(author))
         self.resizeEvent(QResizeEvent(self.size(), self.size()))
 
-    def load_music(self, playlist_name: str = ""):
+    def load_music(self):
         self.playlist_loading_thread = QThread()
+        self.playlist_loader = tasks.PlaylistLoader(self)
 
         self.playlist_loader.moveToThread(self.playlist_loading_thread)
         self.playlist_loader.done_loading.connect(self.playlist_loading_thread.quit)
         self.playlist_loader.item_loaded.connect(self.push_item)
 
-        self.playlist_loading_thread.started.connect(
-            partial(self.playlist_loader.load, playlist_name)
-        )
+        self.playlist_loading_thread.started.connect(self.playlist_loader.load)
         self.playlist_loading_thread.start()
+
+    def load_from_playlist(self, playlist_name: str):
+        path_dir = PLAYLIST_DIRECTORY + playlist_name + ".json"
+
+        if not os.path.exists(path_dir):
+            return
+
+        self.current_playlist_name = playlist_name
+        self.is_downloads_playlist = False
+
+        self.referencing_images = list()
+        self.referencing_url = dict()
+        self.referencing_url["musics"] = list()
+
+        with open(path_dir, mode="r") as file:
+            data = json.loads(file.read())
+
+        self.setRowCount(0)
+
+        for music_data in data["musics"]:
+            try:
+                index = music_data["index"]
+                image = self.images[index]
+                url = self.urls["musics"][index]["id"]
+                title = music_data.get("title", self.urls["musics"][index]["title"])
+                author = music_data.get("author", self.urls["musics"][index]["author"])
+
+                self.referencing_url["musics"].append(
+                    {"id": url, "index": index, "title": title, "author": author}
+                )
+                self.referencing_images.append(image)
+            except Exception as error:
+                logger.error("Error Occurred: %s", error)
+                continue
+            self.push_item(image, title, author)
+
+        logger.debug(self.referencing_url)
+
+    def save_current_playlist(self):
+        if self.is_downloads_playlist:
+            logger.debug("returned")
+            return
+
+        data = {"musics": []}
+
+        for music in self.referencing_url["musics"]:
+            data["musics"].append(
+                {
+                    "index": music["index"],
+                    "title": music["title"],
+                    "author": music["author"],
+                }
+            )
+
+        logger.debug(data)
+        with open(
+            f"{PLAYLIST_DIRECTORY}{self.current_playlist_name}.json", mode="w"
+        ) as file:
+            file.write(json.dumps(data, indent=2))
 
     def resizeEvent(self, e: QtGui.QResizeEvent) -> None:
         for i in range(self.rowCount()):
-            data = self.referenced_images[i]
+            data = self.referencing_images[i]
             image = QPixmap()
             image.loadFromData(data)
 
@@ -184,13 +300,21 @@ class Playlist(QTableWidget):
 
         return super().resizeEvent(e)
 
+    def get_by_index(self, index: int = None):
+        if index is None:
+            index = self.current_playing_index
+
+        return self.referencing_url["musics"][index]["id"]
+
     def change_music(self):
+        if self.current_playing_index == self.currentRow():
+            self.after_change()
+            return
+
         self.current_playing_index = self.currentRow()
 
         self.media_player.setSource(
-            QUrl.fromLocalFile(
-                DOWNLOADS_DIRECTORY + self.referenced_url[self.current_playing_index]
-            )
+            QUrl.fromLocalFile(DOWNLOADS_DIRECTORY + self.get_by_index())
         )
 
     def pause(self):
@@ -200,27 +324,59 @@ class Playlist(QTableWidget):
         self.media_player.play()
 
     def delete_playlist(self, delete_row: int):
+        if self.rowCount() <= 0:
+            return
+
         text = self.item(delete_row, 1).text()
-        url = self.referenced_url[delete_row]
+        url = self.get_by_index(delete_row)
 
         self.removeRow(delete_row)
 
         self.media_player.setSource(QUrl())
 
-        # just for sure that the thing actually deletes lol
-        while True:
+        if self.is_downloads_playlist:
             try:
                 os.remove(DOWNLOADS_DIRECTORY + url)
-            except Exception:
-                continue
+            except Exception as error:
+                QMessageBox.warning(
+                    self.top_widget,
+                    "Failed to remove audio!".title(),
+                    f"Failed to remove audio! Error: {error}",
+                )
 
-            break
+            try:
+                os.remove(THUMBNAIL_FOLDER + url)
+            except Exception as error:
+                QMessageBox.warning(
+                    self.top_widget,
+                    "Failed to remove thumbnail".title(),
+                    f"Failed to remove thumbnail! Error: {error}",
+                )
+
+        del self.referencing_url["musics"][delete_row]
+        del self.referencing_images[delete_row]
+
+        self.save_current_playlist()
 
         QMessageBox.information(
             self.top_widget,
             "Removed Successful!",
             f'Removed "{text}" from the playlist!',
         )
+
+    def show_add_widget(self):
+        self.download_musics_listwidget.clear()
+
+        for music in self.urls["musics"]:
+            self.download_musics_listwidget.addItem(music["title"])
+            self.download_musics_listwidget.setMinimumWidth(
+                self.download_musics_listwidget.sizeHintForColumn(0)
+            )
+
+        # self.download_musics_listwidget.setCurrentRow(-1)
+
+        self.download_musics_dialog.show()
+        self.download_musics_listwidget.selectionModel().clear()
 
     def show_custom_context_menu(self, pos: QPoint):
         menu = QMenu(self)
@@ -229,6 +385,7 @@ class Playlist(QTableWidget):
             add_music_from_downloads_playlist = QAction(
                 "Add from downloads playlist", self
             )
+            add_music_from_downloads_playlist.triggered.connect(self.show_add_widget)
             menu.addAction(add_music_from_downloads_playlist)
 
         delete_music_action = QAction("Delete", self)
@@ -250,7 +407,7 @@ class Playlist(QTableWidget):
         """
         index = self.current_playing_index + 1
 
-        if index >= len(self.referenced_url):
+        if index >= len(self.referencing_url["musics"]):
             if start_over:
                 index = 0
             else:
@@ -259,7 +416,7 @@ class Playlist(QTableWidget):
         self.current_playing_index = index
         self.selectRow(self.current_playing_index)
         self.media_player.setSource(
-            QUrl.fromLocalFile(DOWNLOADS_DIRECTORY + self.referenced_url[index])
+            QUrl.fromLocalFile(DOWNLOADS_DIRECTORY + self.get_by_index())
         )
         return False
 
@@ -267,17 +424,17 @@ class Playlist(QTableWidget):
         index = self.current_playing_index - 1
 
         if index < 0:
-            index = len(self.referenced_url) - 1
+            index = len(self.referencing_url["musics"]) - 1
 
         self.current_playing_index = index
         self.selectRow(self.current_playing_index)
         self.media_player.setSource(
-            QUrl.fromLocalFile(DOWNLOADS_DIRECTORY + self.referenced_url[index])
+            QUrl.fromLocalFile(DOWNLOADS_DIRECTORY + self.get_by_index())
         )
 
     def after_change(self):
         is_playing = (
-            self.media_player.playbackState is QMediaPlayer.PlaybackState.PlayingState
+            self.media_player.playbackState() is QMediaPlayer.PlaybackState.PlayingState
         ) or self.top_widget.ui.resume_button.isVisible()
 
         if is_playing:
@@ -289,26 +446,44 @@ class Playlist(QTableWidget):
                 item.setForeground(QColor(0, 0, 0))
                 break
 
-        self.item(self.current_playing_index, 1).setForeground(
-            CURRENT_PLAYING_SONG_COLOR
-        )
+        if self.item(self.current_playing_index, 1) is not None:
+            self.item(self.current_playing_index, 1).setForeground(
+                CURRENT_PLAYING_SONG_COLOR
+            )
 
         self.has_music.emit(self.current_playing_index)
 
-    def handle_error(self, *_):
+    def handle_error(self, error):
+        if error is QMediaPlayer.Error.ResourceError:
+            # This is a bit stupid. The reason why I'm doing this is because if user drag the slider too fast
+            # even if the resource exist this will still be called so when this happens I need to actually
+            # check if the resource is valid or not other wise just keeps trying to play so user won't be confused
+            if os.path.exists(DOWNLOAD_AUDIO_TO + f"/{self.get_by_index()}"):
+                self.media_player.play()
+                return
+
+            QMessageBox.warning(
+                self.top_widget,
+                "Warning!",
+                f"""Song "{self.item(self.current_playing_index, 1).text()}" \
+does not exist! Check if you accidentally removed it""",
+            )
+            return
+
+        logger.error("Error occurred: %s", error)
         self.media_player.play()
-        
+
     def generate_random_playlist(self):
         self.random_playlist = list()
-        for index, url in enumerate(self.referenced_url):
-            self.random_playlist.append((index, url))
-            
+        for index, url in enumerate(self.referencing_url["musics"]):
+            self.random_playlist.append((index, url["id"]))
+
         random.shuffle(self.random_playlist)
 
     def media_status_changed(self, status: QMediaPlayer.MediaStatus):
         if status is not QMediaPlayer.MediaStatus.EndOfMedia:
             return
-        
+
         match self.playback_mode:
             case PlaybackMode.Loop:
                 self.forward()
@@ -320,16 +495,298 @@ class Playlist(QTableWidget):
                 while True:
                     # when the user uses this the first time, the self.random_playlist might not generate, so catch the error and then genereate a new one and
                     # then start all over again
+                    # might be a little stupid but idk lol
                     try:
                         self.current_playing_index = self.random_playlist[0][0]
-                        self.media_player.setSource(QUrl.fromLocalFile(DOWNLOADS_DIRECTORY + self.random_playlist[0][1]))
+                        self.media_player.setSource(
+                            QUrl.fromLocalFile(
+                                DOWNLOADS_DIRECTORY + self.random_playlist[0][1]
+                            )
+                        )
                         self.random_playlist.pop(0)
                         self.selectRow(self.current_playing_index)
                     except Exception:
                         self.generate_random_playlist()
                         continue
                     break
-                
+
     @classmethod
     def set_playback_mode(cls, playback_mode: PlaybackMode):
         cls.playback_mode = playback_mode
+
+    def dropEvent(self, event: QDropEvent):
+        if not event.isAccepted() and event.source() == self:
+            drop_row = self.drop_on(event)
+
+            rows = sorted(set(item.row() for item in self.selectedItems()))
+            rows_to_move = [
+                [
+                    QTableWidgetItem(self.item(row_index, column_index))
+                    for column_index in range(self.columnCount())
+                ]
+                for row_index in rows
+            ]
+            for row_index in reversed(rows):
+                self.removeRow(row_index)
+                if row_index < drop_row:
+                    drop_row -= 1
+
+            for row_index, data in enumerate(rows_to_move):
+                row_index += drop_row
+                self.insertRow(row_index)
+                for column_index, column_data in enumerate(data):
+                    self.setItem(row_index, column_index, column_data)
+            event.accept()
+            for row_index in range(len(rows_to_move)):
+                self.item(drop_row + row_index, 0).setSelected(True)
+                self.item(drop_row + row_index, 1).setSelected(True)
+                self.item(drop_row + row_index, 2).setSelected(True)
+
+        logger.debug(f"selected rows: {rows}, drop row:{drop_row}")
+
+        (self.referencing_images[drop_row], self.referencing_images[rows[0]],) = (
+            self.referencing_images[rows[0]],
+            self.referencing_images[drop_row],
+        )
+
+        (
+            self.referencing_url["musics"][drop_row],
+            self.referencing_url["musics"][rows[0]],
+        ) = (
+            self.referencing_url["musics"][rows[0]],
+            self.referencing_url["musics"][drop_row],
+        )
+
+        # a little hack to call the resize event for this widget so that the images can be loaded
+        self.top_widget.resize(
+            self.top_widget.width() + 1, self.top_widget.height() + 1
+        )
+        self.top_widget.resize(
+            self.top_widget.width() - 1, self.top_widget.height() - 1
+        )
+
+        super().dropEvent(event)
+
+    def drop_on(self, event: QDropEvent):
+        index = self.indexAt(event.position().toPoint())
+        if not index.isValid():
+            return self.rowCount()
+
+        return (
+            index.row() + 1
+            if self.is_below(event.position().toPoint(), index)
+            else index.row()
+        )
+
+    def is_below(self, pos, index):
+        rect = self.visualRect(index)
+        margin = 2
+        if pos.y() - rect.top() < margin:
+            return False
+        elif rect.bottom() - pos.y() < margin:
+            return True
+        # noinspection PyTypeChecker
+        return (
+            rect.contains(pos, True)
+            and not (
+                self.model().flags(index).value
+                & QtCore.Qt.ItemFlag.ItemIsDropEnabled.value
+            )
+            and pos.y() >= rect.center().y()
+        )
+
+    def save_downloads_playlist(self):
+        with open(PLAYLIST_DIRECTORY + "downloads.json", mode="w") as file:
+            file.write(json.dumps({"musics": self.urls["musics"]}, indent=2))
+
+    def add_music(self):
+        current_index = self.download_musics_listwidget.currentRow()
+        music = self.urls["musics"][current_index]
+
+        self.referencing_url["musics"].append({**music, "index": current_index})
+        self.referencing_images.append(self.images[current_index])
+        self.push_item(self.images[current_index], music["title"], music["author"])
+
+        QMessageBox.information(
+            self.download_musics_dialog,
+            "Added!",
+            f"Added {self.urls['musics'][current_index]['title']} successfully to current playlist!",
+        )
+
+    def dataChanged(
+        self,
+        top_left: QtCore.QModelIndex,
+        bottom_right: QtCore.QModelIndex,
+        roles: Iterable[int] = None,
+    ) -> None:
+        if len(roles) == 0 or len(roles) == 1:
+            return
+
+        item = self.currentItem()
+        column, row = self.currentIndex().column(), self.currentIndex().row()
+        logger.debug(item.text())
+
+        match column:
+            case 1:
+                self.referencing_url["musics"][row]["title"] = item.text()
+            case 2:
+                self.referencing_url["musics"][row]["author"] = item.text()
+
+
+class PlaylistsHandler(QListWidget):
+    playlists: list[str] = list()
+
+    def __init__(self, parent: QWidget = None) -> None:
+        from app import App
+
+        super().__init__(parent)
+
+        self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.customContextMenuRequested.connect(self.custom_context_menu)
+
+        self.add_playlist_widget = QDialog()
+
+        self.ui = Ui_AddPlaylist()
+        self.ui.setupUi(self.add_playlist_widget)
+        self.add_playlist_widget.hide()
+
+        self.DEFAULT_TITLE = self.add_playlist_widget.windowTitle()
+
+        self.load_playlists()
+
+        self.ui.ok_button.clicked.connect(self.add_playlist)
+        self.ui.cancel_button.clicked.connect(
+            lambda: (self.add_playlist_widget.hide(), self.reset_widget())
+        )
+
+        self.itemClicked.connect(self.item_changed)
+
+        self.top_widget = self.parent()
+        while self.top_widget.parent() is not None:
+            self.top_widget = self.top_widget.parent()
+        self.top_widget: App = self.top_widget
+
+    @staticmethod
+    def generate_item(text: str) -> QListWidgetItem:
+        item = QListWidgetItem(text)
+        item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+        return item
+
+    def reset_widget(self):
+        self.ui.playlist_name.clear()
+        self.add_playlist_widget.setWindowTitle(self.DEFAULT_TITLE)
+
+    def load_playlists(self):
+        for filename in os.listdir(PLAYLIST_DIRECTORY):
+            if filename == "downloads.json":
+                continue
+
+            if filename.endswith(".json"):
+                filename = filename[: -len(".json")]
+
+            self.playlists.append(filename)
+            self.addItem(self.generate_item(filename))
+
+    def add_playlist(self):
+        self.addItem(self.generate_item(self.ui.playlist_name.text()))
+        self.playlists.append(self.ui.playlist_name.text())
+
+        with open(
+            f"{PLAYLIST_DIRECTORY}{self.ui.playlist_name.text()}.json", mode="w"
+        ) as file:
+            file.write(json.dumps({"musics": []}, indent=2))
+
+        self.add_playlist_widget.hide()
+        self.reset_widget()
+
+    def delete_playlist(self):
+        from ui.playlist_ui import Ui_PlaylistWidget
+
+        if self.currentRow() == -1:
+            return
+
+        item = self.currentItem()
+
+        try:
+            os.remove(f"{PLAYLIST_DIRECTORY}{item.text()}.json")
+        except Exception as error:
+            QMessageBox.warning(
+                self,
+                "Failed to delete playlist!",
+                f'Failed to delete "{item.text()}"! Error: {error}',
+            )
+            return
+
+        self.takeItem(self.row(item))
+
+        ui_playlist: Ui_PlaylistWidget = self.top_widget.get_widget("playlist")
+        ui_playlist.playlist.set_downloads_playlist_mode()
+
+        self.deselect()
+
+        QMessageBox.information(
+            self, "Deleted Successful!", f"Deleted {item.text()} successfully!"
+        )
+
+    def edit_playlist(self):
+        if self.currentItem() is None:
+            return
+
+        text = self.ui.playlist_name.text()
+        old_name = self.currentItem().text()
+
+        os.rename(
+            PLAYLIST_DIRECTORY + old_name + ".json", PLAYLIST_DIRECTORY + text + ".json"
+        )
+
+        self.currentItem().setText(text)
+
+        self.add_playlist_widget.hide()
+        self.reset_widget()
+
+    def custom_context_menu(self, pos: QPoint):
+        menu = QMenu(self)
+
+        add_action = QAction("Add Playlist", self)
+        add_action.triggered.connect(
+            lambda: (
+                self.ui.ok_button.disconnect(),
+                self.ui.ok_button.clicked.connect(self.add_playlist),
+                self.add_playlist_widget.exec(),
+            )
+        )
+        menu.addAction(add_action)
+
+        delete_action = QAction("Delete", self)
+        delete_action.triggered.connect(self.delete_playlist)
+        menu.addAction(delete_action)
+
+        edit_action = QAction("Edit", self)
+        edit_action.triggered.connect(
+            lambda: (
+                self.add_playlist_widget.setWindowTitle("Edit Playlist"),
+                self.ui.playlist_name.setText(self.currentItem().text()),
+                self.ui.ok_button.disconnect(),
+                self.ui.ok_button.clicked.connect(self.edit_playlist),
+                self.add_playlist_widget.exec(),
+            )
+        )
+        menu.addAction(edit_action)
+
+        menu.exec(self.mapToGlobal(pos))
+
+    def item_changed(self, item: QListWidgetItem):
+        for row in range(self.count()):
+            current_item = self.item(row)
+            if current_item.foreground().color() == QColor(115, 115, 115):
+                current_item.setForeground(QColor(0, 0, 0))
+                break
+
+        item.setForeground(qRgb(115, 115, 115))
+
+    def deselect(self):
+        self.setCurrentRow(-1)
+        for row in range(self.count()):
+            item = self.item(row)
+            if item.foreground().color() == QColor(115, 115, 115):
+                item.setForeground(QColor(0, 0, 0))
