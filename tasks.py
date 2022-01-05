@@ -165,11 +165,12 @@ class VideoDownload(QObject):
 
             except Exception as error:
                 logger.error("Error while downloading video: %s", error)
-                self.manager.done_downloading.emit(bytes(), link, error, True)
+                self.manager.done_downloading.emit(link, error, True)
                 self.manager.mutex.lock()
                 self.download_list.pop(0)
                 self.manager.mutex.unlock()
                 continue
+
             self.manager.done_downloading.emit(link, Exception(), False)
             self.manager.mutex.lock()
             self.download_list.pop(0)

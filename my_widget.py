@@ -185,7 +185,7 @@ class Playlist(QTableWidget):
         self.setRowCount(0)
 
         if "musics" not in self.urls:
-            return
+            self.urls["musics"] = list()
 
         for index, music_data in enumerate(self.urls["musics"]):
             try:

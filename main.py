@@ -10,7 +10,7 @@ try:
     os.makedirs("./playlists")
     if not os.path.exists(PLAYLIST_DIRECTORY + "downloads.json"):
         with open(PLAYLIST_DIRECTORY + "downloads.json", mode="w+") as file:
-            file.write("{musics: []}")
+            file.write("{ musics: [] }")
 except Exception:
     pass
 
