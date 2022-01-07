@@ -8,28 +8,6 @@ SEARCH_LIMIT = 15
 LOGGING_LEVEL = logging.DEBUG
 FORMAT = "[%(filename)s(%(lineno)s): %(levelname)s] %(funcName)s(): %(message)s"
 
-
-class CustomFormatter(logging.Formatter):
-    yellow = "\x1b[33;20m"
-    red = "\x1b[31;20m"
-    bold_red = "\x1b[31;1m"
-    reset = "\x1b[0m"
-    format = FORMAT
-
-    FORMATS = {
-        logging.DEBUG: format + reset,
-        logging.INFO: format + reset,
-        logging.WARNING: yellow + format + reset,
-        logging.ERROR: red + format + reset,
-        logging.CRITICAL: bold_red + format + reset,
-    }
-
-    def format(self, record):
-        log_fmt = self.FORMATS.get(record.levelno)
-        formatter = logging.Formatter(log_fmt)
-        return formatter.format(record)
-
-
 DOWNLOAD_AUDIO_TO = "downloads"
 DOWNLOADS_PLAYLIST = DOWNLOAD_AUDIO_TO
 

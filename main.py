@@ -20,7 +20,6 @@ from app_settings import (
     IMAGE_RESOURCES,
     LOGGING_LEVEL,
     PLAYLIST_DIRECTORY,
-    CustomFormatter,
 )
 from PyQt6 import QtCore
 

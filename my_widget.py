@@ -1,7 +1,6 @@
 import logging
 import json
 import os
-from PyQt6.sip import delete
 import coloredlogs
 import tasks
 import PyQt6.QtNetwork
@@ -10,12 +9,12 @@ import random
 
 from typing import Iterable, Optional
 from PyQt6 import QtGui
-from PyQt6.QtCore import QModelIndex, QPoint, QThread, QUrl, Qt, pyqtSlot
+from PyQt6.QtCore import QPoint, QThread, QUrl, Qt, pyqtSlot
 from PyQt6.QtGui import QAction, QBrush, QColor, QDropEvent, QPixmap, QResizeEvent, qRgb
 from PyQt6.QtWidgets import (
     QAbstractItemView,
-    QDial,
     QDialog,
+    QFileDialog,
     QHBoxLayout,
     QHeaderView,
     QLabel,
@@ -39,10 +38,10 @@ from app_settings import (
     PLAYLIST_DIRECTORY,
     THUMBNAIL_FOLDER,
 )
-from functools import partial
 from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput
 from PyQt6 import QtCore
 from ui.add_playlist_ui import Ui_AddPlaylist
+from ui.music_setting import Ui_MusicSetting
 
 coloredlogs.install(fmt=FORMAT, level=LOGGING_LEVEL)
 logger = logging.getLogger(__name__)
@@ -81,12 +80,9 @@ class PlaybackMode(enum.Enum):
 
 
 class Playlist(QTableWidget):
-    # urls: PlaylistType = list()
     urls = dict()
     images = list()
     has_music = QtCore.pyqtSignal(int)
-    # done_loading = QtCore.pyqtSignal()
-    # error_occurred = QtCore.pyqtSignal(Exception)
 
     playback_mode = PlaybackMode.Loop
 
@@ -130,7 +126,7 @@ class Playlist(QTableWidget):
         self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.customContextMenuRequested.connect(self.show_custom_context_menu)
 
-        self.media_player.sourceChanged.connect(self.after_change)
+        self.media_player.sourceChanged.connect(self.music_changed)
         self.media_player.errorOccurred.connect(self.handle_error)
 
         self.media_player.mediaStatusChanged.connect(self.media_status_changed)
@@ -170,6 +166,44 @@ class Playlist(QTableWidget):
 
         self.confirm_add_button.clicked.connect(self.add_music)
         self.cancel_button.clicked.connect(self.download_musics_dialog.hide)
+
+        self.music_setting_dialog = QDialog()
+        self.music_setting_ui = Ui_MusicSetting()
+        self.music_setting_ui.setupUi(self.music_setting_dialog)
+
+        self.music_setting_ui.browse_button.clicked.connect(self.browse_file)
+        self.music_setting_ui.current_multiplier.setPageStep(50)
+        self.music_setting_ui.current_multiplier.setSingleStep(25)
+        self.music_setting_ui.current_multiplier.valueChanged.connect(
+            lambda value: self.music_setting_ui.current_multiplier_label.setText(
+                str(value / 100)
+            )
+        )
+
+        self.music_setting_ui.ok_button.clicked.connect(self.save_music_setting)
+        self.music_setting_ui.cancel_button.clicked.connect(
+            self.music_setting_dialog.hide
+        )
+        self.music_setting_dialog.reject = self.save_music_setting
+
+    def save_music_setting(self):
+        music_setting = self.music_setting_ui
+        self.set_data(music_setting.title.text(), "title", self.currentRow())
+        self.set_data(music_setting.author.text(), "author", self.currentRow())
+        self.set_data(
+            music_setting.current_multiplier.value() / 100,
+            "volume_multiplier",
+            self.currentRow(),
+        )
+        self.music_setting_dialog.hide()
+
+    def browse_file(self):
+        filename = QFileDialog.getOpenFileName(
+            self.music_setting_dialog,
+            "Select Image...",
+            "",
+            "Image Files (*.png *.jpg *.bmp *.jpeg *.ppm *.xbm *.xpm)",
+        )[0]
 
     def set_downloads_playlist_mode(self):
         """
@@ -244,9 +278,16 @@ class Playlist(QTableWidget):
                 url = self.urls["musics"][index]["id"]
                 title = music_data.get("title", self.urls["musics"][index]["title"])
                 author = music_data.get("author", self.urls["musics"][index]["author"])
+                volume_multiplier = music_data.get("volume_multiplier", 1.0)
 
                 self.referencing_url["musics"].append(
-                    {"id": url, "index": index, "title": title, "author": author}
+                    {
+                        "id": url,
+                        "index": index,
+                        "title": title,
+                        "author": author,
+                        "volume_multiplier": volume_multiplier,
+                    }
                 )
                 self.referencing_images.append(image)
             except Exception as error:
@@ -300,21 +341,24 @@ class Playlist(QTableWidget):
 
         return super().resizeEvent(e)
 
-    def get_by_index(self, index: int = None):
+    def get_data(self, data_name: str = "id", index: int = None):
         if index is None:
             index = self.current_playing_index
 
-        return self.referencing_url["musics"][index]["id"]
+        return self.referencing_url["musics"][index][data_name]
+
+    def set_data(self, data, data_name: str = "id", index: int = None):
+        self.referencing_url["musics"][index][data_name] = data
 
     def change_music(self):
         if self.current_playing_index == self.currentRow():
-            self.after_change()
+            self.music_changed()
             return
 
         self.current_playing_index = self.currentRow()
 
         self.media_player.setSource(
-            QUrl.fromLocalFile(DOWNLOADS_DIRECTORY + self.get_by_index())
+            QUrl.fromLocalFile(DOWNLOADS_DIRECTORY + self.get_data())
         )
 
     def pause(self):
@@ -328,7 +372,7 @@ class Playlist(QTableWidget):
             return
 
         text = self.item(delete_row, 1).text()
-        url = self.get_by_index(delete_row)
+        url = self.get_data(index=delete_row)
 
         self.removeRow(delete_row)
 
@@ -394,6 +438,38 @@ class Playlist(QTableWidget):
         )
         menu.addAction(delete_music_action)
 
+        music_setting_action = QAction("Settings", self)
+        music_setting_action.triggered.connect(
+            lambda: (
+                self.music_setting_ui.author.setText(
+                    self.referencing_url["musics"][self.currentRow()]["author"]
+                ),
+                self.music_setting_ui.title.setText(
+                    self.referencing_url["musics"][self.currentRow()]["title"]
+                ),
+                self.music_setting_ui.current_multiplier.setRange(
+                    0, int(1 / self.audio_output.volume() * 100)
+                ),
+                self.music_setting_ui.current_multiplier.setValue(
+                    int(
+                        self.referencing_url["musics"][self.currentRow()][
+                            "volume_multiplier"
+                        ]
+                        * 100
+                    )
+                ),
+                self.music_setting_ui.current_multiplier_label.setText(
+                    str(
+                        self.referencing_url["musics"][self.currentRow()][
+                            "volume_multiplier"
+                        ]
+                    )
+                ),
+                self.music_setting_dialog.exec(),
+            )
+        )
+        menu.addAction(music_setting_action)
+
         menu.exec(self.mapToGlobal(pos))
 
     def forward(self, start_over: bool = True) -> bool:
@@ -416,7 +492,7 @@ class Playlist(QTableWidget):
         self.current_playing_index = index
         self.selectRow(self.current_playing_index)
         self.media_player.setSource(
-            QUrl.fromLocalFile(DOWNLOADS_DIRECTORY + self.get_by_index())
+            QUrl.fromLocalFile(DOWNLOADS_DIRECTORY + self.get_data())
         )
         return False
 
@@ -429,13 +505,22 @@ class Playlist(QTableWidget):
         self.current_playing_index = index
         self.selectRow(self.current_playing_index)
         self.media_player.setSource(
-            QUrl.fromLocalFile(DOWNLOADS_DIRECTORY + self.get_by_index())
+            QUrl.fromLocalFile(DOWNLOADS_DIRECTORY + self.get_data())
         )
 
-    def after_change(self):
+    def music_changed(self):
         is_playing = (
             self.media_player.playbackState() is QMediaPlayer.PlaybackState.PlayingState
         ) or self.top_widget.ui.resume_button.isVisible()
+
+        volume_multiplier = self.referencing_url["musics"][self.current_playing_index][
+            "volume_multiplier"
+        ]
+
+        new_volume = self.audio_output.volume() * volume_multiplier
+        if new_volume > 1.0:
+            new_volume = 1.0
+        self.audio_output.setVolume(new_volume)
 
         if is_playing:
             self.media_player.play()
@@ -458,7 +543,7 @@ class Playlist(QTableWidget):
             # This is a bit stupid. The reason why I'm doing this is because if user drag the slider too fast
             # even if the resource exist this will still be called so when this happens I need to actually
             # check if the resource is valid or not other wise just keeps trying to play so user won't be confused
-            if os.path.exists(DOWNLOAD_AUDIO_TO + f"/{self.get_by_index()}"):
+            if os.path.exists(DOWNLOAD_AUDIO_TO + f"/{self.get_data()}"):
                 self.media_player.play()
                 return
 

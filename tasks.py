@@ -19,7 +19,6 @@ from app_settings import (
     THUMBNAIL_FOLDER,
 )
 from PyQt6.QtGui import QPixmap
-from PyQt6.QtWidgets import QMessageBox, QWidget
 
 from my_widget import PlaybackMode, Playlist
 
@@ -84,7 +83,7 @@ class ImageLoader(QObject):
 
             except Exception as error:
                 logger.error("Failed to load image! (Error: %s)", error)
-                self.thumbnails.append(QPixmap())
+                self.thumbnails.append(QPixmap("images:no-thumbnail.png"))
                 self.image_loaded.emit(index)
                 continue
 
@@ -159,7 +158,12 @@ class VideoDownload(QObject):
                     file.write(data)
 
                 Playlist.urls["musics"].append(
-                    {"id": video.video_id, "title": video.title, "author": video.author}
+                    {
+                        "id": video.video_id,
+                        "title": video.title,
+                        "author": video.author,
+                        "volume_multiplier": 1.0,
+                    }
                 )
                 Playlist.images.append(data)
 
@@ -191,7 +195,6 @@ class PlaylistLoader(QObject):
         self.playlist_widget = playlist_widget
 
     def load(self):
-        is_downloads_playlist = self.playlist_widget.is_downloads_playlist
         playlist_name = DOWNLOADS_PLAYLIST
 
         if not os.path.isdir(playlist_name):
@@ -208,11 +211,19 @@ class PlaylistLoader(QObject):
 
         try:
             for music in data["musics"]:
-                video_id = music["id"]
-                title = music["title"]
-                author = music["author"]
+                video_id = music.get("id", "")
+                title = music.get("title", "")
+                author = music.get("author", "")
+                volume_multiplier = music.get("volume_multiplier", 1.0)
 
-                musics.append({"id": video_id, "title": title, "author": author})
+                musics.append(
+                    {
+                        "id": video_id,
+                        "title": title,
+                        "author": author,
+                        "volume_multiplier": volume_multiplier,
+                    }
+                )
 
                 if os.path.exists(THUMBNAIL_FOLDER + video_id) or os.path.exists(
                     "resources/images/no-thumbnail.png"

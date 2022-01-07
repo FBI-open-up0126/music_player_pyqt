@@ -1,7 +1,6 @@
 import time
 import datetime
 import logging
-import urllib.request as urlreq
 import coloredlogs
 import pytube
 import tasks
@@ -11,7 +10,6 @@ from PyQt6.QtWidgets import (
     QDialog,
     QHeaderView,
     QLabel,
-    QListWidgetItem,
     QMessageBox,
     QPushButton,
     QTableWidget,
@@ -27,7 +25,7 @@ from ui.welcome_menu import Ui_WelcomeMenu
 from ui.download_from_url_dialog import Ui_DownloadFromURL
 from my_widget import DownloadButton, PlaybackMode
 from PyQt6 import QtGui
-from app_settings import FORMAT, LOGGING_LEVEL, CustomFormatter
+from app_settings import FORMAT, LOGGING_LEVEL
 from ui.playlist_ui import Ui_PlaylistWidget
 from tasks import Settings
 
