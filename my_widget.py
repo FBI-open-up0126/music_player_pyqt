@@ -454,7 +454,7 @@ class Playlist(QTableWidget):
                     self.referencing_url["musics"][self.currentRow()]["title"]
                 ),
                 self.music_setting_ui.current_multiplier.setRange(
-                    0, int(1 / (tasks.Settings.volume / 100) * 100)
+                    0, int(1 / (self.top_widget.ui.volume_bar.value() / 100) * 100)
                 ),
                 self.music_setting_ui.current_multiplier.setValue(
                     int(
