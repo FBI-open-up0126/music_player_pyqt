@@ -196,6 +196,9 @@ class Playlist(QTableWidget):
             self.currentRow(),
         )
         self.music_setting_dialog.hide()
+        
+        if self.currentRow() == self.current_playing_index:
+            self.music_changed()
 
     def browse_file(self):
         filename = QFileDialog.getOpenFileName(
@@ -341,11 +344,14 @@ class Playlist(QTableWidget):
 
         return super().resizeEvent(e)
 
-    def get_data(self, data_name: str = "id", index: int = None):
+    def get_data(self, data_name: str = "id", index: int = None, default_value=None):
         if index is None:
             index = self.current_playing_index
 
-        return self.referencing_url["musics"][index][data_name]
+        try:
+            return self.referencing_url["musics"][index][data_name]
+        except Exception:
+            return default_value
 
     def set_data(self, data, data_name: str = "id", index: int = None):
         self.referencing_url["musics"][index][data_name] = data
@@ -448,7 +454,7 @@ class Playlist(QTableWidget):
                     self.referencing_url["musics"][self.currentRow()]["title"]
                 ),
                 self.music_setting_ui.current_multiplier.setRange(
-                    0, int(1 / self.audio_output.volume() * 100)
+                    0, int(1 / (tasks.Settings.volume / 100) * 100)
                 ),
                 self.music_setting_ui.current_multiplier.setValue(
                     int(
@@ -456,7 +462,7 @@ class Playlist(QTableWidget):
                             "volume_multiplier"
                         ]
                         * 100
-                    )
+                    ),
                 ),
                 self.music_setting_ui.current_multiplier_label.setText(
                     str(
@@ -517,7 +523,7 @@ class Playlist(QTableWidget):
             "volume_multiplier"
         ]
 
-        new_volume = self.audio_output.volume() * volume_multiplier
+        new_volume = tasks.Settings.volume / 100 * volume_multiplier
         if new_volume > 1.0:
             new_volume = 1.0
         self.audio_output.setVolume(new_volume)

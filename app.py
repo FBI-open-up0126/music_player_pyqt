@@ -23,7 +23,7 @@ from ui.help_dialog import Ui_HelpDialog
 from ui.search_menu import Ui_SearchMenu
 from ui.welcome_menu import Ui_WelcomeMenu
 from ui.download_from_url_dialog import Ui_DownloadFromURL
-from my_widget import DownloadButton, PlaybackMode
+from my_widget import DownloadButton, PlaybackMode, Playlist
 from PyQt6 import QtGui
 from app_settings import FORMAT, LOGGING_LEVEL
 from ui.playlist_ui import Ui_PlaylistWidget
@@ -228,15 +228,16 @@ class App(QWidget):
         )
 
         self.ui.progress_bar.valueChanged.connect(
-            lambda value: (ui_playlist.playlist.media_player.setPosition(value),)
+            lambda value: (ui_playlist.playlist.media_player.setPosition(value))
         )
 
         self.ui.progress_bar.setPageStep(10 * 1000)
         self.ui.progress_bar.setSingleStep(5 * 1000)
 
         self.ui.volume_bar.valueChanged.connect(
-            lambda value: (ui_playlist.playlist.audio_output.setVolume(value / 100),)
+            lambda value: (self.set_volume(ui_playlist.playlist, value))
         )
+
         self.ui.volume_bar.setValue(Settings.volume)
 
         self.ui.playbackmode_loop.clicked.connect(
@@ -279,6 +280,15 @@ class App(QWidget):
                 self.get_widget("playlist", 0).show(),
             )
         )
+
+    @staticmethod
+    def set_volume(playlist: Playlist, value: int):
+        new_volume = (
+            value / 100 * playlist.get_data("volume_multiplier", default_value=1)
+        )
+        if new_volume > 1.0:
+            new_volume = 1.0
+        playlist.audio_output.setVolume(new_volume)
 
     def add_widget(self, ui, name: str):
         menu = QWidget(self.ui.main_menu)
