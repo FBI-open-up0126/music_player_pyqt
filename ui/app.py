@@ -13,10 +13,12 @@ class Ui_App(object):
     def setupUi(self, App):
         App.setObjectName("App")
         App.resize(800, 600)
+        App.setStyleSheet("")
         self.gridLayout = QtWidgets.QGridLayout(App)
         self.gridLayout.setObjectName("gridLayout")
         self.search_button = QtWidgets.QPushButton(App)
         self.search_button.setMinimumSize(QtCore.QSize(0, 30))
+        self.search_button.setStyleSheet("")
         self.search_button.setObjectName("search_button")
         self.gridLayout.addWidget(self.search_button, 0, 0, 1, 1)
         self.search_bar = QtWidgets.QLineEdit(App)

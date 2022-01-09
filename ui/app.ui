@@ -13,6 +13,9 @@
   <property name="windowTitle">
    <string>Music Player</string>
   </property>
+  <property name="styleSheet">
+   <string notr="true"/>
+  </property>
   <layout class="QGridLayout" name="gridLayout">
    <item row="0" column="0">
     <widget class="QPushButton" name="search_button">
@@ -24,6 +27,9 @@
      </property>
      <property name="toolTip">
       <string>Search</string>
+     </property>
+     <property name="styleSheet">
+      <string notr="true"/>
      </property>
      <property name="text">
       <string>Search</string>

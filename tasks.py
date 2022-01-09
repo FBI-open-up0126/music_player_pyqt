@@ -38,7 +38,7 @@ class SearchVideo(QObject):
             ).result()
             self.result_ready.emit(search_results)
         except Exception as error:
-            logger.error("No Internet Connection Avaliable! (Error: %s)", error)
+            logger.error("Error occurred while searching! (Error: %s)", error)
             self.error_occurred.emit(error)
         finally:
             self.done.emit()
@@ -79,7 +79,7 @@ class ImageLoader(QObject):
                     Qt.AspectRatioMode.KeepAspectRatio,
                     Qt.TransformationMode.SmoothTransformation,
                 )
-                self.thumbnails.append(image)
+                self.thumbnails.append((image, result["duration"]))
 
             except Exception as error:
                 logger.error("Failed to load image! (Error: %s)", error)

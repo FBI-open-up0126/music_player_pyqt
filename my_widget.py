@@ -196,7 +196,7 @@ class Playlist(QTableWidget):
             self.currentRow(),
         )
         self.music_setting_dialog.hide()
-        
+
         if self.currentRow() == self.current_playing_index:
             self.music_changed()
 

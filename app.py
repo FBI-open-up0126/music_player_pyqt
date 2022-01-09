@@ -5,7 +5,7 @@ import coloredlogs
 import pytube
 import tasks
 
-from PyQt6.QtCore import QDateTime, QThread, QTimer, pyqtSlot
+from PyQt6.QtCore import QDateTime, QRect, QThread, QTimer, Qt, pyqtSlot
 from PyQt6.QtWidgets import (
     QDialog,
     QHeaderView,
@@ -380,11 +380,27 @@ class App(QWidget):
 
     @pyqtSlot(int, QTableWidget)
     def load_image(self, index: int, table_widget: QTableWidget):
+        pixmap: QtGui.QPixmap = self.image_loader.thumbnails[0][0]
+        duration = self.image_loader.thumbnails[0][1]
+
         thumbnail = QLabel()
-        thumbnail.setPixmap(self.image_loader.thumbnails[0])
-        self.image_loader.thumbnails.pop()
+        thumbnail.setPixmap(pixmap)
+
+        duration = QLabel(duration, thumbnail)
+        duration.setFont(QtGui.QFont("SF Mono", 12))
+        duration.setStyleSheet("QLabel { color: white; background-color: black }")
+
         table_widget.setCellWidget(index, 0, thumbnail)
         table_widget.resizeRowsToContents()
+
+        bottom_left = thumbnail.size()
+
+        duration.move(
+            bottom_left.width() - duration.width() - 10,
+            200 - duration.height(),
+        )
+
+        self.image_loader.thumbnails.pop()
 
     def start_search(self):
         if not self.ui.search_bar.text():
