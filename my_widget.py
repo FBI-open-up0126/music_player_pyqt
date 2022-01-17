@@ -42,11 +42,29 @@ from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput
 from PyQt6 import QtCore
 from ui.add_playlist_ui import Ui_AddPlaylist
 from ui.music_setting import Ui_MusicSetting
+from PyQt6.QtWidgets import QProxyStyle, QStyle, QStyleOption, QStyleHintReturn
 
 coloredlogs.install(fmt=FORMAT, level=LOGGING_LEVEL)
 logger = logging.getLogger(__name__)
 
 PlaylistType = list[dict[str, str]]
+
+
+class QSliderDirectJumpStyle(QProxyStyle):
+    def styleHint(
+        self,
+        hint: QStyle.StyleHint,
+        option: QStyleOption = None,
+        widget: QWidget = None,
+        returnData: QStyleHintReturn = None,
+    ) -> int:
+        if hint == QStyle.StyleHint.SH_Slider_AbsoluteSetButtons:
+            return (
+                Qt.MouseButton.LeftButton
+                | Qt.MouseButton.MiddleButton
+                | Qt.MouseButton.RightButton
+            ).value
+        return super().styleHint(hint, option, widget, returnData)
 
 
 class DownloadButton(QPushButton):
@@ -188,8 +206,13 @@ class Playlist(QTableWidget):
 
     def save_music_setting(self):
         music_setting = self.music_setting_ui
+
         self.set_data(music_setting.title.text(), "title", self.currentRow())
+        self.item(self.currentRow(), 1).setText(music_setting.title.text())
+
         self.set_data(music_setting.author.text(), "author", self.currentRow())
+        self.item(self.currentRow(), 2).setText(music_setting.title.text())
+
         self.set_data(
             music_setting.current_multiplier.value() / 100,
             "volume_multiplier",
@@ -281,7 +304,9 @@ class Playlist(QTableWidget):
                 url = self.urls["musics"][index]["id"]
                 title = music_data.get("title", self.urls["musics"][index]["title"])
                 author = music_data.get("author", self.urls["musics"][index]["author"])
-                volume_multiplier = music_data.get("volume_multiplier", 1.0)
+                volume_multiplier = music_data.get(
+                    "volume_multiplier", self.urls.get("volume_multiplier", 1.0)
+                )
 
                 self.referencing_url["musics"].append(
                     {
@@ -482,10 +507,10 @@ class Playlist(QTableWidget):
         """[start the next song]
 
         Args:
-            start_over (bool, optional): [if start over after reaches to the end]. Defaults to True.
+                start_over (bool, optional): [if start over after reaches to the end]. Defaults to True.
 
         Returns:
-            bool: [returns true if the next song is none, and the start over is set to false]
+                bool: [returns true if the next song is none, and the start over is set to false]
         """
         index = self.current_playing_index + 1
 

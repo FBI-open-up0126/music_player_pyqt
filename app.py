@@ -23,7 +23,7 @@ from ui.help_dialog import Ui_HelpDialog
 from ui.search_menu import Ui_SearchMenu
 from ui.welcome_menu import Ui_WelcomeMenu
 from ui.download_from_url_dialog import Ui_DownloadFromURL
-from my_widget import DownloadButton, PlaybackMode, Playlist
+from my_widget import DownloadButton, PlaybackMode, Playlist, QSliderDirectJumpStyle
 from PyQt6 import QtGui
 from app_settings import FORMAT, LOGGING_LEVEL
 from ui.playlist_ui import Ui_PlaylistWidget
@@ -45,6 +45,12 @@ class App(QWidget):
         self.ui.setupUi(self)
 
         Settings.read_settings()
+
+        self.ui.progress_bar.setStyle(
+            QSliderDirectJumpStyle(self.ui.progress_bar.style())
+        )
+
+        self.ui.volume_bar.setStyle(QSliderDirectJumpStyle(self.ui.volume_bar.style()))
 
         self.ui.pause_button.setIcon(QtGui.QIcon("images:pause.png"))
         self.ui.pause_button.setEnabled(False)
@@ -480,7 +486,8 @@ class App(QWidget):
 
     @pyqtSlot(DownloadButton)
     def start_download(self, button: DownloadButton):
-        if pytube.YouTube(button.link).length >= 600:
+        video = pytube.YouTube(button.link)
+        if video >= 600:
             choice_button = QMessageBox.warning(
                 self,
                 "Warning",
@@ -489,6 +496,21 @@ class App(QWidget):
             )
             if choice_button == QMessageBox.StandardButton.Cancel:
                 return
+
+        for index, url in enumerate(Playlist.urls):
+            if video.video_id == url:
+                choice = QMessageBox.warning(
+                    self,
+                    "Warning",
+                    "Video is already downloaded. Do you want to replace it?",
+                    QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel,
+                )
+                if choice == QMessageBox.StandardButton.Cancel:
+                    return
+
+                ui: Ui_PlaylistWidget = self.get_widget("playlist")
+                ui.playlist.delete_playlist(index)
+
         logger.debug(f"start download {button.link}")
 
         try:

@@ -47,14 +47,6 @@ def check_resource(widget: QWidget):
 
 
 def main():
-    # player = QMediaPlayer()
-    # audio_output = QAudioOutput()
-    # player.setAudioOutput(audio_output)
-    # player.setSource(QUrl.fromLocalFile(f"./downloads/f2xGxd9xPYA"))
-    # player.play()
-
-    # logger.debug(json.dumps({1: 1}, indent=2))
-
     application = QApplication(sys.argv)
     widget = app.App()
 
