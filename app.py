@@ -487,7 +487,7 @@ class App(QWidget):
     @pyqtSlot(DownloadButton)
     def start_download(self, button: DownloadButton):
         video = pytube.YouTube(button.link)
-        if video >= 600:
+        if video.length >= 600:
             choice_button = QMessageBox.warning(
                 self,
                 "Warning",
